@@ -25,7 +25,7 @@ const schedule = [
     { show: "Notícias do Dia", start: "06:30", end: "08:30" },
     { show: "Crime e Castigo", start: "09:50", end: "11:00" },
     { show: "Banca do Sapateiro", start: "11:00", end: "13:00" },
-    { show: "Jornal da Tarde", start: "15:25", end: "17:00" }
+    { show: "Jornal da Tarde", start: "15:25", end: "17:00" }, // <--- VÍRGULA ADICIONADA AQUI!
     { show: "Teste", start: "18:10", end: "18:15" }
 ];
 
@@ -101,24 +101,21 @@ monitor(); // Primeira checagem ao ligar
 // FUNÇÃO PARA AVISAR NO TELEGRAM QUE O SISTEMA FOI LIGADO
 // =======================================================
 async function enviarAlertaInicializacao() {
+    if (!TELEGRAM_TOKEN || TELEGRAM_TOKEN === 'SEU_TOKEN_TELEGRAM') return;
     const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
     try {
-        await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: TELEGRAM_CHAT_ID,
-                text: `🔄 *Monitoramento Online!*\n\nO sistema da Rádio Jornal foi iniciado/reiniciado com sucesso.\n\n📡 *Status:* Ativo e vigiando o YouTube!`,
-                parse_mode: 'Markdown'
-            })
+        await axios.post(url, {
+            chat_id: TELEGRAM_CHAT_ID,
+            text: `🔄 *Monitoramento Online!*\n\nO sistema da Rádio Jornal foi iniciado/reiniciado com sucesso.\n\n📡 *Status:* Ativo e vigiando o YouTube!`,
+            parse_mode: 'Markdown'
         });
         console.log('Alerta de inicialização enviado para o Telegram com sucesso.');
     } catch (error) {
-        console.error('Erro ao enviar alerta de inicialização:', error);
+        console.error('Erro ao enviar alerta de inicialização:', error.message);
     }
 }
 
-// Inicialização do Servidor (Modifique a sua linha existente para ficar igual a esta)
+// Inicialização do Servidor
 app.listen(10000, () => {
     console.log("Servidor rodando na porta 10000");
     
