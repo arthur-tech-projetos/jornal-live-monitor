@@ -26,6 +26,7 @@ const schedule = [
     { show: "Crime e Castigo", start: "09:50", end: "11:00" },
     { show: "Banca do Sapateiro", start: "11:00", end: "13:00" },
     { show: "Jornal da Tarde", start: "15:25", end: "17:00" }
+    { show: "Teste", start: "18:10", end: "18:15" }
 ];
 
 async function enviarTelegram(msg) {
