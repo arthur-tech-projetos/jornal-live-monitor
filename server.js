@@ -87,8 +87,12 @@ async function monitor() {
 }
 
 app.get('/api/status', (req, res) => {
-    res.json({ lives: currentLives, alerts: systemAlerts, time: moment().tz("America/Fortaleza").format("HH:mm") });
-});
+    res.json({ 
+        lives: currentLives, 
+        alerts: systemAlerts, 
+        time: moment().tz("America/Fortaleza").format("HH:mm"),
+        apiStatus: "ONLINE" // O servidor está rodando, logo ele está online
+    });
 
 setInterval(monitor, 30000); // Reduzi para 30 segundos para você ver o teste mais rápido
 monitor();
