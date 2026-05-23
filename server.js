@@ -9,8 +9,8 @@ app.use(cors());
 // ==========================================
 // CONFIGURAÇÕES (Preencha com seus dados)
 // ==========================================
-const API_KEY = 'SUA_CHAVE_YOUTUBE_AQUI';
-const CHANNEL_ID = 'UC_ID_DO_CANAL_DA_RADIO'; // Lembre-se, começa com UC
+const API_KEY = 'AIzaSyDVva6AfqViuq5ZoFbM-WzEfdtjwEVLtwg';
+const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ'; // Lembre-se, começa com UC
 const TELEGRAM_TOKEN = 'SEU_TOKEN_TELEGRAM'; // Se não for usar agora, deixe vazio ''
 const TELEGRAM_CHAT_ID = 'SEU_CHAT_ID'; // Se não for usar agora, deixe vazio ''
 
