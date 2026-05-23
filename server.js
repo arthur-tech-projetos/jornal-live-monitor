@@ -97,6 +97,31 @@ app.get('/api/status', (req, res) => {
 setInterval(monitor, 300000); // Roda a cada 5 minutos
 monitor(); // Primeira checagem ao ligar
 
-app.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
+// =======================================================
+// FUNÇÃO PARA AVISAR NO TELEGRAM QUE O SISTEMA FOI LIGADO
+// =======================================================
+async function enviarAlertaInicializacao() {
+    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+    try {
+        await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: TELEGRAM_CHAT_ID,
+                text: `🔄 *Monitoramento Online!*\n\nO sistema da Rádio Jornal foi iniciado/reiniciado com sucesso.\n\n📡 *Status:* Ativo e vigiando o YouTube!`,
+                parse_mode: 'Markdown'
+            })
+        });
+        console.log('Alerta de inicialização enviado para o Telegram com sucesso.');
+    } catch (error) {
+        console.error('Erro ao enviar alerta de inicialização:', error);
+    }
+}
+
+// Inicialização do Servidor (Modifique a sua linha existente para ficar igual a esta)
+app.listen(10000, () => {
+    console.log("Servidor rodando na porta 10000");
+    
+    // Dispara o aviso no grupo assim que o servidor termina de ligar
+    enviarAlertaInicializacao(); 
 });
