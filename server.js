@@ -11,8 +11,8 @@ app.use(cors());
 // ==========================================
 const API_KEY = 'AIzaSyDVva6AfqViuq5ZoFbM-WzEfdtjwEVLtwg';
 const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ'; // Lembre-se, começa com UC
-const TELEGRAM_TOKEN = 'SEU_TOKEN_TELEGRAM'; // Se não for usar agora, deixe vazio ''
-const TELEGRAM_CHAT_ID = 'SEU_CHAT_ID'; // Se não for usar agora, deixe vazio ''
+const TELEGRAM_TOKEN = '8951777069:AAHbb5vc0uf104_ZJzSgFesHBqk_4lgaySQ'; // Se não for usar agora, deixe vazio ''
+const TELEGRAM_CHAT_ID = '7204574973'; // Se não for usar agora, deixe vazio ''
 
 const PORT = process.env.PORT || 3001;
 
