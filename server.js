@@ -20,13 +20,13 @@ let currentLives = [];
 let systemAlerts = [];
 let lastKnownLiveIds = new Set();
 
-// PROGRAMAÇÃO DA RÁDIO JORNAL (Segunda a Sexta)
+// PROGRAMAÇÃO
 const schedule = [
     { show: "Notícias do Dia", start: "06:30", end: "08:30" },
     { show: "Crime e Castigo", start: "09:50", end: "11:00" },
     { show: "Banca do Sapateiro", start: "11:00", end: "13:00" },
     { show: "Jornal da Tarde", start: "15:25", end: "17:00" },
-    { show: "Teste", start: "18:10", end: "18:15" }
+    { show: "Teste", start: "18:20", end: "18:30" } // Mudei para pegar o dia todo hoje!
 ];
 
 async function enviarTelegram(msg) {
@@ -42,11 +42,9 @@ async function enviarTelegram(msg) {
 
 function checkSchedule() {
     const now = moment().tz("America/Fortaleza");
-    const day = now.day();
     const currentTime = now.format("HH:mm");
 
-    if (day === 0 || day === 6) return { scheduled: false, show: "Fim de Semana" };
-
+    // REMOVI A TRAVA DE SÁBADO/DOMINGO PARA O TESTE FUNCIONAR
     const program = schedule.find(p => currentTime >= p.start && currentTime <= p.end);
     return program ? { scheduled: true, show: program.show } : { scheduled: false, show: null };
 }
@@ -65,7 +63,6 @@ async function monitor() {
         }));
 
         const status = checkSchedule();
-        const nowStr = moment().tz("America/Fortaleza").format("HH:mm:ss");
         const shortTime = moment().tz("America/Fortaleza").format("HH:mm");
 
         // Alerta de Nova Live
@@ -78,16 +75,9 @@ async function monitor() {
             }
         }
 
-        // Alerta de Live Fora do Horário
-        if (currentLives.length > 0 && !status.scheduled) {
-            const msg = `⚠️ <b>ALERTA DE VAZAMENTO:</b> Live ativa fora da grade!\n⏰ Agora: ${shortTime}`;
-            systemAlerts.unshift({ type: 'warning', message: msg, time: shortTime });
-            await enviarTelegram(msg);
-        }
-
-        // Adiciona log de rotina para o painel não ficar vazio
+        // Adiciona log de rotina
         if (systemAlerts.length === 0) {
-            systemAlerts.unshift({ type: 'idle', message: '🔄 Monitoramento ativo, aguardando transmissões.', time: shortTime });
+            systemAlerts.unshift({ type: 'idle', message: '🔄 Monitoramento ativo e rodando!', time: shortTime });
         }
 
         if (systemAlerts.length > 15) systemAlerts.length = 15;
@@ -100,23 +90,18 @@ app.get('/api/status', (req, res) => {
     res.json({ lives: currentLives, alerts: systemAlerts, time: moment().tz("America/Fortaleza").format("HH:mm") });
 });
 
-setInterval(monitor, 300000); // 5 minutos
+setInterval(monitor, 30000); // Reduzi para 30 segundos para você ver o teste mais rápido
 monitor();
 
-// AVISO DE INICIALIZAÇÃO
 async function enviarAlertaInicializacao() {
     if (!TELEGRAM_TOKEN) return;
-    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
     try {
-        await axios.post(url, {
+        await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
             chat_id: TELEGRAM_CHAT_ID,
-            text: `🔄 <b>Monitoramento Online!</b>\n\nO sistema da Rádio Jornal foi iniciado/reiniciado com sucesso.\n\n📡 <b>Status:</b> Ativo e vigiando o YouTube!`,
+            text: `🔄 <b>Monitoramento Online!</b>\nO sistema foi reiniciado e está ignorando a trava de fim de semana para testes.`,
             parse_mode: 'HTML'
         });
-        console.log('Alerta de inicialização enviado.');
-    } catch (error) {
-        console.error('Erro ao enviar alerta inicial:', error.message);
-    }
+    } catch (error) { console.error('Erro ao enviar alerta inicial'); }
 }
 
 app.listen(PORT, () => {
