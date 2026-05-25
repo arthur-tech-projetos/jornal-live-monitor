@@ -2,28 +2,61 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const moment = require('moment-timezone');
+const mongoose = require('mongoose');
 
 const app = express();
 app.use(cors());
 
 // ==========================================
-// CONFIGURAÇÕES
+// CONFIGURAÇÕES E CONEXÃO COM O BANCO
 // ==========================================
+// 1. Coloque a sua chave nova do YouTube aqui
 const API_KEY = 'AIzaSyDZ6OzN-CDu2J0lMWpG0qsADvNWvlfIQoc'; 
 const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ';
 const TELEGRAM_TOKEN = '8951777069:AAHbb5vc0uf104_ZJzSgFesHBqk_4lgaySQ';
 const TELEGRAM_CHAT_ID = '-5294989968';
 
+// 2. Coloque a sua URL do MongoDB Atlas aqui
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arthur:Arthur12@XP@cluster0.nrt11po.mongodb.net/?appName=Cluster0';
+
 const PORT = process.env.PORT || 10000;
 
 let currentLives = [];
-let systemAlerts = [];
-let pastLives = []; // Armazena o histórico das últimas transmissões encerradas
 let lastKnownLiveIds = new Set();
 let erro429Notificado = false; 
-let telegramOffset = 0; // Controla as mensagens lidas no Telegram
+let telegramOffset = 0; 
 
-// Envio padrão para o Telegram
+mongoose.connect(MONGODB_URI)
+    .then(() => console.log("Banco de dados permanente conectado com sucesso!"))
+    .catch((err) => console.error("Erro ao conectar ao banco de dados:", err.message));
+
+// ==========================================
+// MODELOS DO BANCO DE DADOS
+// ==========================================
+const AlertaSchema = new mongoose.Schema({
+    id: String,
+    type: String,
+    title: String,
+    detail: String,
+    time: String,
+    createdAt: { type: Date, default: Date.now }
+});
+const Alerta = mongoose.model('Alerta', AlertaSchema);
+
+const LivePassadaSchema = new mongoose.Schema({
+    id: String,
+    title: String,
+    date: String,
+    startTime: String,
+    endTime: String,
+    duration: String,
+    createdAt: { type: Date, default: Date.now }
+});
+const LivePassada = mongoose.model('LivePassada', LivePassadaSchema);
+
+// ==========================================
+// FUNÇÕES DE TELEGRAM E LOGS
+// ==========================================
 async function enviarTelegramComFoto(photoUrl, msg) {
     if (!TELEGRAM_TOKEN) return;
     try {
@@ -46,17 +79,24 @@ async function enviarTelegramComFoto(photoUrl, msg) {
     }
 }
 
-// Log Unificado (Painel + Telegram)
 async function registrarEventoGlobal(id, tipo, titulo, detalhe, enviarProTelegram = true) {
-    systemAlerts.unshift({ 
-        id: id, 
-        type: tipo, 
-        title: titulo, 
-        detail: detalhe, 
-        time: moment().tz("America/Fortaleza").format("HH:mm") 
-    });
+    try {
+        await Alerta.create({
+            id: id,
+            type: tipo,
+            title: titulo,
+            detail: detalhe,
+            time: moment().tz("America/Fortaleza").format("HH:mm")
+        });
 
-    if (systemAlerts.length > 50) systemAlerts.pop();
+        const totalAlertas = await Alerta.countDocuments();
+        if (totalAlertas > 100) {
+            const maisAntigo = await Alerta.findOne().sort({ createdAt: 1 });
+            if (maisAntigo) await Alerta.deleteOne({ _id: maisAntigo._id });
+        }
+    } catch (dbErr) {
+        console.error("Falha ao salvar log no banco:", dbErr.message);
+    }
 
     if (enviarProTelegram) {
         let icone = "ℹ️";
@@ -71,7 +111,7 @@ async function registrarEventoGlobal(id, tipo, titulo, detalhe, enviarProTelegra
 }
 
 // ==========================================
-// BOT INTERATIVO: PROCESSADOR DE COMANDOS
+// BOT INTERATIVO DO TELEGRAM (/status e /logs)
 // ==========================================
 async function processarComandosTelegram() {
     try {
@@ -80,18 +120,16 @@ async function processarComandosTelegram() {
         const updates = res.data.result || [];
 
         for (const update of updates) {
-            telegramOffset = update.update_id + 1; // Marca como lida
+            telegramOffset = update.update_id + 1; 
 
             if (!update.message || !update.message.text) continue;
             const chatId = update.message.chat.id;
             const text = update.message.text.trim();
 
-            // COMANDO 1: /status
             if (text === '/status') {
                 let statusMsg = `📊 <b>CENTRAL DE COMANDO - ARTHUR TECH</b>\n\n`;
                 statusMsg += `🖥️ <b>API Status:</b> ONLINE 🟢\n`;
-                statusMsg += `🕒 <b>Horário Local:</b> ${moment().tz("America/Fortaleza").format("HH:mm:ss")}\n`;
-                statusMsg += `📈 <b>Total Monitorado Hoje:</b> ${currentLives.length + pastLives.length}\n\n`;
+                statusMsg += `🕒 <b>Horário Local:</b> ${moment().tz("America/Fortaleza").format("HH:mm:ss")}\n\n`;
 
                 if (currentLives.length === 0) {
                     statusMsg += `⚪ <b>Transmissão Atual:</b> Nenhuma live ativa no momento. Em modo de espera com economia de dados ativa.`;
@@ -111,10 +149,9 @@ async function processarComandosTelegram() {
                 });
             }
 
-            // COMANDO 2: /logs
             else if (text === '/logs') {
+                const ultimosAlertas = await Alerta.find().sort({ createdAt: -1 }).limit(5);
                 let logsMsg = `📋 <b>ÚLTIMOS 5 ALERTAS DO SISTEMA:</b>\n\n`;
-                const ultimosAlertas = systemAlerts.slice(0, 5);
 
                 if (ultimosAlertas.length === 0) {
                     logsMsg += `ℹ️ Nenhum log registrado até o momento.`;
@@ -138,16 +175,14 @@ async function processarComandosTelegram() {
     } catch (e) {
         console.error("Erro ao processar comandos do Telegram:", e.message);
     }
-    // Mantém a escuta ativa infinitamente
     setTimeout(processarComandosTelegram, 4000);
 }
 
 // ==========================================
-// O MOTOR INTELIGENTE (Economia de API)
+// MOTOR INTELIGENTE DE BUSCA
 // ==========================================
 async function monitor() {
     try {
-        // PASSO 1: MODO ECONÔMICO (Custa apenas 1 Ponto)
         if (currentLives.length > 0) {
             for (let i = currentLives.length - 1; i >= 0; i--) {
                 const videoId = currentLives[i].id;
@@ -158,17 +193,15 @@ async function monitor() {
 
                 if (!item || item.snippet.liveBroadcastContent !== 'live') {
                     const liveTitle = currentLives[i].title;
-                    const startTimeRaw = currentLives[i].startTimeRaw;
+                    const startTimeRaw = moment(currentLives[i].startTimeRaw);
                     const endTime = moment().tz("America/Fortaleza");
                     
-                    // Cálculo inteligente da duração do programa
                     const durationMinutes = endTime.diff(startTimeRaw, 'minutes');
                     const formattedDuration = durationMinutes > 0 ? `${durationMinutes} minutos` : "Menos de 1 minuto";
 
                     currentLives.splice(i, 1);
                     
-                    // Alimenta a lista de Histórico para o Recurso 5
-                    pastLives.unshift({
+                    await LivePassada.create({
                         id: videoId,
                         title: liveTitle,
                         date: startTimeRaw.format("DD/MM/YYYY"),
@@ -177,9 +210,7 @@ async function monitor() {
                         duration: formattedDuration
                     });
 
-                    if (pastLives.length > 30) pastLives.pop(); // Mantém os últimos 30 programas para não estourar memória
-
-                    registrarEventoGlobal(
+                    await registrarEventoGlobal(
                         videoId + '-end', 
                         'idle', 
                         'Transmissão Encerrada', 
@@ -190,7 +221,6 @@ async function monitor() {
             }
         }
 
-        // PASSO 2: MODO RASTREADOR (Custa 100 Pontos)
         if (currentLives.length === 0) {
             const urlSearch = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${CHANNEL_ID}&eventType=live&type=video&key=${API_KEY}`;
             const res = await axios.get(urlSearch);
@@ -210,7 +240,7 @@ async function monitor() {
                                      `🔗 <a href="https://youtube.com/watch?v=${videoId}">Clique aqui para assistir</a>`;
                     
                     await enviarTelegramComFoto(thumbnailUrl, mensagem);
-                    registrarEventoGlobal(videoId, 'alert', 'Nova Live Iniciada', title, false);
+                    await registrarEventoGlobal(videoId, 'alert', 'Nova Live Iniciada', title, false);
                     lastKnownLiveIds.add(videoId);
                 }
                 
@@ -219,7 +249,7 @@ async function monitor() {
                     title: title,
                     isLive: true,
                     startTime: nowTime.format("HH:mm"),
-                    startTimeRaw: nowTime // Guardado puro para calcular a duração exata depois
+                    startTimeRaw: nowTime.toISOString()
                 });
             }
 
@@ -232,10 +262,10 @@ async function monitor() {
     } catch (err) { 
         if (err.response && err.response.status === 429) {
             if (!erro429Notificado) {
-                registrarEventoGlobal('erro-429', 'warning', 'Aviso de Limite da API', 'O limite de consultas do YouTube foi atingido. O monitoramento entrará em modo silencioso.', true);
+                await registrarEventoGlobal('erro-429', 'warning', 'Aviso de Limite da API', 'O limite de consultas do YouTube foi atingido. O monitoramento entrará em modo silencioso.', true);
                 erro429Notificado = true; 
             } else {
-                registrarEventoGlobal('erro-429-wait', 'warning', 'Aguardando Cota', 'Aguardando o YouTube liberar o limite diário...', false);
+                await registrarEventoGlobal('erro-429-wait', 'warning', 'Aguardando Cota', 'Aguardando o YouTube liberar o limite diário...', false);
             }
         } else {
             console.error("Erro na API do YouTube:", err.message); 
@@ -244,43 +274,48 @@ async function monitor() {
 }
 
 // ==========================================
-// ROTAS DA API (Endpoints)
+// ROTAS DA API
 // ==========================================
+app.get('/api/status', async (req, res) => {
+    try {
+        const dbAlerts = await Alerta.find().sort({ createdAt: -1 }).limit(30);
+        const dbPastLives = await LivePassada.find().sort({ createdAt: -1 }).limit(30);
 
-// Retorna dados para o painel (Inclui agora a lista do histórico recente para o Recurso 5)
-app.get('/api/status', (req, res) => {
-    res.json({ 
-        lives: currentLives, 
-        pastLives: pastLives, // Adicionado aqui! Agora o seu front-end pode ler essa lista e criar a aba secundária
-        alerts: systemAlerts, 
-        time: moment().tz("America/Fortaleza").format("HH:mm"),
-        apiStatus: "ONLINE" 
-    });
-});
-
-// RECURSO 4: ROTA DE DOWNLOAD DE RELATÓRIO COMERCIAL (Gera .CSV puro aceito pelo Excel)
-app.get('/api/report/download', (req, res) => {
-    // Cabeçalho estruturado do Excel
-    let csvContent = "\uFEFF"; // Garante os acentos corretos no Excel (UTF-8 BOM)
-    csvContent += "Data;Titulo do Programa;Horario de Inicio;Horario de Termino;Duracao Total\n";
-
-    if (pastLives.length === 0) {
-        csvContent += "---;Nenhuma transmissão salva no histórico ainda;---;---;---\n";
-    } else {
-        pastLives.forEach(live => {
-            // Remove pontos e vírgulas do título para não quebrar as colunas do Excel
-            const cleanTitle = live.title.replace(/;/g, ' ').replace(/\n/g, ' ');
-            csvContent += `${live.date};${cleanTitle};${live.startTime};${live.endTime};${live.duration}\n`;
+        res.json({ 
+            lives: currentLives, 
+            pastLives: dbPastLives, 
+            alerts: dbAlerts, 
+            time: moment().tz("America/Fortaleza").format("HH:mm"),
+            apiStatus: "ONLINE" 
         });
+    } catch (err) {
+        res.status(500).json({ error: "Erro ao buscar dados no banco persistente" });
     }
-
-    // Configura o navegador do cliente para receber o arquivo como download oficial
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename=relatorio_monitoramento_radio.csv');
-    res.status(200).send(csvContent);
 });
 
-// Execução inicial
+app.get('/api/report/download', async (req, res) => {
+    try {
+        const todasAsLives = await LivePassada.find().sort({ createdAt: -1 });
+        let csvContent = "\uFEFF"; 
+        csvContent += "Data;Titulo do Programa;Horario de Inicio;Horario de Termino;Duracao Total\n";
+
+        if (todasAsLives.length === 0) {
+            csvContent += "---;Nenhuma transmissão salva no histórico do banco ainda;---;---;---\n";
+        } else {
+            todasAsLives.forEach(live => {
+                const cleanTitle = live.title.replace(/;/g, ' ').replace(/\n/g, ' ');
+                csvContent += `${live.date};${cleanTitle};${live.startTime};${live.endTime};${live.duration}\n`;
+            });
+        }
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename=relatorio_monitoramento_radio.csv');
+        res.status(200).send(csvContent);
+    } catch (err) {
+        res.status(500).send("Erro ao gerar relatório.");
+    }
+});
+
 setInterval(monitor, 900000);
 
 app.listen(PORT, () => {
@@ -289,9 +324,9 @@ app.listen(PORT, () => {
         'startup-' + Date.now(), 
         'idle', 
         'Monitoramento Online!', 
-        'O sistema da Rádio Jornal foi iniciado/reiniciado com sucesso.\n\n📡 Status: Ativo e automatizado com Inteligência de Comandos e Relatórios!', 
+        'O sistema da Rádio Jornal foi iniciado/reiniciado com sucesso.\n\n📡 Status: Conectado ao Banco de Dados Permanente!', 
         true
     );
     monitor();
-    processarComandosTelegram(); // Inicializa a escuta de comandos do Telegram
+    processarComandosTelegram(); 
 });
