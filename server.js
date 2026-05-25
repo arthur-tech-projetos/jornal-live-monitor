@@ -17,7 +17,7 @@ const TELEGRAM_TOKEN = '8951777069:AAHbb5vc0uf104_ZJzSgFesHBqk_4lgaySQ';
 const TELEGRAM_CHAT_ID = '-5294989968';
 
 // 2. URL oficial do seu banco de dados configurada
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arthur:Arthur12@XP@cluster0.nrt11po.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arthur:Arthur12%40XP@cluster0.nrt11po.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 
 const PORT = process.env.PORT || 10000;
 
