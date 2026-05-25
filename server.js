@@ -11,7 +11,7 @@ app.use(cors());
 // CONFIGURAÇÕES E CONEXÃO COM O BANCO
 // ==========================================
 // 1. Coloque a sua chave ativa do YouTube aqui
-const API_KEY = 'SUA_CHAVE_DO_YOUTUBE_AQUI'; 
+const API_KEY = 'AIzaSyDZ6OzN-CDu2J0lMWpG0qsADvNWvlfIQoc'; 
 const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ';
 const TELEGRAM_TOKEN = '8951777069:AAHbb5vc0uf104_ZJzSgFesHBqk_4lgaySQ';
 const TELEGRAM_CHAT_ID = '-5294989968';
