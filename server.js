@@ -10,14 +10,14 @@ app.use(cors());
 // ==========================================
 // CONFIGURAÇÕES E CONEXÃO COM O BANCO
 // ==========================================
-// 1. Coloque a sua chave nova do YouTube aqui
-const API_KEY = 'AIzaSyDZ6OzN-CDu2J0lMWpG0qsADvNWvlfIQoc'; 
+// 1. Coloque a sua chave ativa do YouTube aqui
+const API_KEY = 'SUA_CHAVE_DO_YOUTUBE_AQUI'; 
 const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ';
 const TELEGRAM_TOKEN = '8951777069:AAHbb5vc0uf104_ZJzSgFesHBqk_4lgaySQ';
 const TELEGRAM_CHAT_ID = '-5294989968';
 
-// 2. Coloque a sua URL do MongoDB Atlas aqui
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arthur:Arthur12@XP@cluster0.nrt11po.mongodb.net/?appName=Cluster0';
+// 2. URL oficial do seu banco de dados configurada
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arthur:<password>@cluster0.nrt11po.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 
 const PORT = process.env.PORT || 10000;
 
@@ -31,7 +31,7 @@ mongoose.connect(MONGODB_URI)
     .catch((err) => console.error("Erro ao conectar ao banco de dados:", err.message));
 
 // ==========================================
-// MODELOS DO BANCO DE DADOS
+// MODELOS DO BANCO DE DADOS (Persistência)
 // ==========================================
 const AlertaSchema = new mongoose.Schema({
     id: String,
@@ -173,13 +173,18 @@ async function processarComandosTelegram() {
             }
         }
     } catch (e) {
-        console.error("Erro ao processar comandos do Telegram:", e.message);
+        if (e.response && e.response.status === 409) {
+            // Silencia o conflito temporário de deploys paralelos do Render
+            console.log("Aguardando instância antiga do Telegram encerrar...");
+        } else {
+            console.error("Erro ao processar comandos do Telegram:", e.message);
+        }
     }
     setTimeout(processarComandosTelegram, 4000);
 }
 
 // ==========================================
-// MOTOR INTELIGENTE DE BUSCA
+// MOTOR INTELIGENTE DE BUSCA (Multi-Marchas)
 // ==========================================
 async function monitor() {
     try {
@@ -274,7 +279,7 @@ async function monitor() {
 }
 
 // ==========================================
-// ROTAS DA API
+// ROTAS DA API (Endpoints)
 // ==========================================
 app.get('/api/status', async (req, res) => {
     try {
@@ -289,7 +294,7 @@ app.get('/api/status', async (req, res) => {
             apiStatus: "ONLINE" 
         });
     } catch (err) {
-        res.status(500).json({ error: "Erro ao buscar dados no banco persistente" });
+        res.status(500).json({ error: "Erro ao buscar dados no banco" });
     }
 });
 
