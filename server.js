@@ -10,7 +10,7 @@ app.use(cors());
 // CONFIGURAÇÕES
 // ==========================================
 // Coloque sua NOVA chave aqui para zerar o limite 429
-const API_KEY = 'AIzaSyDOpCDRyn4knLVv5mfABC3Ih0ozRVCJNOw'; 
+const API_KEY = 'AIzaSyDZ6OzN-CDu2J0lMWpG0qsADvNWvlfIQoc'; 
 const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ';
 const TELEGRAM_TOKEN = '8951777069:AAHbb5vc0uf104_ZJzSgFesHBqk_4lgaySQ';
 const TELEGRAM_CHAT_ID = '-5294989968';
