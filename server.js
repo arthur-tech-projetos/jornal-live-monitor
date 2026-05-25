@@ -9,7 +9,7 @@ app.use(cors());
 // ==========================================
 // CONFIGURAÇÕES
 // ==========================================
-const API_KEY = 'AIzaSyCyYYBf49IcWmyWmjO0ONgc3lv24u9AaxA';
+const API_KEY = 'AIzaSyAm4VfbHqxLDk3J4vRIZky3k_EwQo007MM';
 const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ';
 const TELEGRAM_TOKEN = '8951777069:AAHbb5vc0uf104_ZJzSgFesHBqk_4lgaySQ';
 const TELEGRAM_CHAT_ID = '-5294989968';
@@ -92,7 +92,19 @@ async function monitor() {
         }));
 
     } catch (err) { 
-        console.error("Erro na API do YouTube:", err.message); 
+        // Tratamento específico para o erro 429
+        if (err.response && err.response.status === 429) {
+            console.error("Erro 429: Cota diária do YouTube excedida.");
+            systemAlerts.unshift({ 
+                id: 'erro-429', 
+                type: 'warning', 
+                title: 'Aviso de Limite da API', 
+                detail: 'O limite de consultas do YouTube foi atingido. O monitoramento retornará amanhã.', 
+                time: moment().tz("America/Fortaleza").format("HH:mm") 
+            });
+        } else {
+            console.error("Erro na API do YouTube:", err.message); 
+        }
     }
 }
 
@@ -105,7 +117,8 @@ app.get('/api/status', (req, res) => {
     });
 });
 
-setInterval(monitor, 300000);
+// ALERTA CORRIGIDO: Intervalo alterado para 15 minutos (900000 ms) para nunca mais dar erro 429
+setInterval(monitor, 900000);
 monitor();
 
 app.listen(PORT, () => {
