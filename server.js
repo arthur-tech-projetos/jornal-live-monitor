@@ -9,7 +9,7 @@ app.use(cors());
 // ==========================================
 // CONFIGURAÇÕES
 // ==========================================
-// Coloque sua NOVA chave aqui para zerar o limite 429
+// Lembre-se de colocar a sua chave válida aqui
 const API_KEY = 'AIzaSyDZ6OzN-CDu2J0lMWpG0qsADvNWvlfIQoc'; 
 const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ';
 const TELEGRAM_TOKEN = '8951777069:AAHbb5vc0uf104_ZJzSgFesHBqk_4lgaySQ';
@@ -20,6 +20,7 @@ const PORT = process.env.PORT || 10000;
 let currentLives = [];
 let systemAlerts = [];
 let lastKnownLiveIds = new Set();
+let erro429Notificado = false; 
 
 // Envio para o Telegram
 async function enviarTelegramComFoto(photoUrl, msg) {
@@ -61,6 +62,9 @@ async function registrarEventoGlobal(id, tipo, titulo, detalhe, enviarProTelegra
         if (tipo === "warning") icone = "⚠️";
         if (tipo === "alert") icone = "🚨";
         if (tipo === "success" || tipo === "idle") icone = "🔄";
+        
+        // Se for encerramento, usa um ícone específico
+        if (titulo === "Transmissão Encerrada") icone = "🛑";
 
         const msgTelegram = `${icone} <b>${titulo}</b>\n\n${detalhe}`;
         await enviarTelegramComFoto(null, msgTelegram);
@@ -72,8 +76,7 @@ async function registrarEventoGlobal(id, tipo, titulo, detalhe, enviarProTelegra
 // ==========================================
 async function monitor() {
     try {
-        // PASSO 1: MODO ECONÔMICO (Custa apenas 1 Ponto)
-        // Se já sabemos que tem uma live rodando, apenas verificamos se ela continua aberta
+        // PASSO 1: MODO ECONÔMICO
         if (currentLives.length > 0) {
             for (let i = currentLives.length - 1; i >= 0; i--) {
                 const videoId = currentLives[i].id;
@@ -82,17 +85,24 @@ async function monitor() {
                 const res = await axios.get(urlVideos);
                 const item = res.data.items[0];
 
-                // Se o vídeo sumiu ou o status mudou de 'live' para 'none', a transmissão acabou
                 if (!item || item.snippet.liveBroadcastContent !== 'live') {
-                    console.log(`Live encerrada: ${currentLives[i].title}`);
+                    const liveTitle = currentLives[i].title;
+                    console.log(`Live encerrada: ${liveTitle}`);
                     currentLives.splice(i, 1);
-                    registrarEventoGlobal(videoId + '-end', 'idle', 'Transmissão Encerrada', 'A rádio finalizou a live no YouTube.', false);
+                    
+                    // CORREÇÃO: Agora o último parâmetro é 'true' para enviar ao Telegram!
+                    registrarEventoGlobal(
+                        videoId + '-end', 
+                        'idle', 
+                        'Transmissão Encerrada', 
+                        `A rádio finalizou a live no YouTube:\n📺 <b>${liveTitle}</b>`, 
+                        true
+                    );
                 }
             }
         }
 
-        // PASSO 2: MODO RASTREADOR (Custa 100 Pontos)
-        // Só fazemos a busca cara se NÃO houver nenhuma live ativa na nossa memória no momento
+        // PASSO 2: MODO RASTREADOR
         if (currentLives.length === 0) {
             const urlSearch = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${CHANNEL_ID}&eventType=live&type=video&key=${API_KEY}`;
             const res = await axios.get(urlSearch);
@@ -126,10 +136,17 @@ async function monitor() {
             lastKnownLiveIds = new Set([...lastKnownLiveIds].filter(id => currentIds.has(id)));
         }
 
+        erro429Notificado = false;
+
     } catch (err) { 
         if (err.response && err.response.status === 429) {
-            console.error("Erro 429: Cota diária do YouTube excedida.");
-            registrarEventoGlobal('erro-429', 'warning', 'Aviso de Limite da API', 'O limite de consultas do YouTube foi atingido. O monitoramento retornará amanhã.', true);
+            if (!erro429Notificado) {
+                console.error("Erro 429: Cota diária excedida. Silenciando alertas do Telegram até o reset.");
+                registrarEventoGlobal('erro-429', 'warning', 'Aviso de Limite da API', 'O limite de consultas do YouTube foi atingido. O monitoramento entrará em modo silencioso até a cota renovar de madrugada.', true);
+                erro429Notificado = true; 
+            } else {
+                registrarEventoGlobal('erro-429-wait', 'warning', 'Aguardando Cota', 'Aguardando o YouTube liberar o limite diário...', false);
+            }
         } else if (err.response && err.response.status === 403) {
             console.error("Erro 403: Chave bloqueada.");
             registrarEventoGlobal('erro-403', 'warning', 'Aviso de API Key', 'A chave do YouTube é inválida ou bloqueada.', true);
@@ -148,7 +165,6 @@ app.get('/api/status', (req, res) => {
     });
 });
 
-// Intervalo de 15 minutos (900000ms). Com o modo inteligente, o limite de 10.000 nunca mais será estourado.
 setInterval(monitor, 900000);
 
 app.listen(PORT, () => {
