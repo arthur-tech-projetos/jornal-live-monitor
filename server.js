@@ -9,7 +9,6 @@ app.use(cors());
 // ==========================================
 // CONFIGURAÇÕES
 // ==========================================
-// Lembre-se de colocar a sua chave válida aqui
 const API_KEY = 'AIzaSyDZ6OzN-CDu2J0lMWpG0qsADvNWvlfIQoc'; 
 const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ';
 const TELEGRAM_TOKEN = '8951777069:AAHbb5vc0uf104_ZJzSgFesHBqk_4lgaySQ';
@@ -19,10 +18,12 @@ const PORT = process.env.PORT || 10000;
 
 let currentLives = [];
 let systemAlerts = [];
+let pastLives = []; // Armazena o histórico das últimas transmissões encerradas
 let lastKnownLiveIds = new Set();
 let erro429Notificado = false; 
+let telegramOffset = 0; // Controla as mensagens lidas no Telegram
 
-// Envio para o Telegram
+// Envio padrão para o Telegram
 async function enviarTelegramComFoto(photoUrl, msg) {
     if (!TELEGRAM_TOKEN) return;
     try {
@@ -62,8 +63,6 @@ async function registrarEventoGlobal(id, tipo, titulo, detalhe, enviarProTelegra
         if (tipo === "warning") icone = "⚠️";
         if (tipo === "alert") icone = "🚨";
         if (tipo === "success" || tipo === "idle") icone = "🔄";
-        
-        // Se for encerramento, usa um ícone específico
         if (titulo === "Transmissão Encerrada") icone = "🛑";
 
         const msgTelegram = `${icone} <b>${titulo}</b>\n\n${detalhe}`;
@@ -72,11 +71,83 @@ async function registrarEventoGlobal(id, tipo, titulo, detalhe, enviarProTelegra
 }
 
 // ==========================================
+// BOT INTERATIVO: PROCESSADOR DE COMANDOS
+// ==========================================
+async function processarComandosTelegram() {
+    try {
+        const urlUpdates = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates?offset=${telegramOffset}&timeout=10`;
+        const res = await axios.get(urlUpdates);
+        const updates = res.data.result || [];
+
+        for (const update of updates) {
+            telegramOffset = update.update_id + 1; // Marca como lida
+
+            if (!update.message || !update.message.text) continue;
+            const chatId = update.message.chat.id;
+            const text = update.message.text.trim();
+
+            // COMANDO 1: /status
+            if (text === '/status') {
+                let statusMsg = `📊 <b>CENTRAL DE COMANDO - ARTHUR TECH</b>\n\n`;
+                statusMsg += `🖥️ <b>API Status:</b> ONLINE 🟢\n`;
+                statusMsg += `🕒 <b>Horário Local:</b> ${moment().tz("America/Fortaleza").format("HH:mm:ss")}\n`;
+                statusMsg += `📈 <b>Total Monitorado Hoje:</b> ${currentLives.length + pastLives.length}\n\n`;
+
+                if (currentLives.length === 0) {
+                    statusMsg += `⚪ <b>Transmissão Atual:</b> Nenhuma live ativa no momento. Em modo de espera com economia de dados ativa.`;
+                } else {
+                    statusMsg += `🚨 <b>TRANSMISSÃO AO VIVO DETECTADA:</b>\n`;
+                    currentLives.forEach(l => {
+                        statusMsg += `📺 <b>Título:</b> ${l.title}\n`;
+                        statusMsg += `⏱️ <b>Iniciada às:</b> ${l.startTime}\n`;
+                        statusMsg += `🔗 <a href="https://youtube.com/watch?v=${l.id}">Assistir no YouTube</a>\n`;
+                    });
+                }
+                
+                await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+                    chat_id: chatId,
+                    text: statusMsg,
+                    parse_mode: 'HTML'
+                });
+            }
+
+            // COMANDO 2: /logs
+            else if (text === '/logs') {
+                let logsMsg = `📋 <b>ÚLTIMOS 5 ALERTAS DO SISTEMA:</b>\n\n`;
+                const ultimosAlertas = systemAlerts.slice(0, 5);
+
+                if (ultimosAlertas.length === 0) {
+                    logsMsg += `ℹ️ Nenhum log registrado até o momento.`;
+                } else {
+                    ultimosAlertas.forEach((a, index) => {
+                        let iconeLog = "ℹ️";
+                        if (a.type === "warning") iconeLog = "⚠️";
+                        if (a.type === "alert") iconeLog = "🚨";
+                        if (a.type === "idle") iconeLog = "🔄";
+                        logsMsg += `${index + 1}. ${iconeLog} [${a.time}] <b>${a.title}</b>\n└ <i>${a.detail}</i>\n\n`;
+                    });
+                }
+
+                await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+                    chat_id: chatId,
+                    text: logsMsg,
+                    parse_mode: 'HTML'
+                });
+            }
+        }
+    } catch (e) {
+        console.error("Erro ao processar comandos do Telegram:", e.message);
+    }
+    // Mantém a escuta ativa infinitamente
+    setTimeout(processarComandosTelegram, 4000);
+}
+
+// ==========================================
 // O MOTOR INTELIGENTE (Economia de API)
 // ==========================================
 async function monitor() {
     try {
-        // PASSO 1: MODO ECONÔMICO
+        // PASSO 1: MODO ECONÔMICO (Custa apenas 1 Ponto)
         if (currentLives.length > 0) {
             for (let i = currentLives.length - 1; i >= 0; i--) {
                 const videoId = currentLives[i].id;
@@ -87,22 +158,39 @@ async function monitor() {
 
                 if (!item || item.snippet.liveBroadcastContent !== 'live') {
                     const liveTitle = currentLives[i].title;
-                    console.log(`Live encerrada: ${liveTitle}`);
+                    const startTimeRaw = currentLives[i].startTimeRaw;
+                    const endTime = moment().tz("America/Fortaleza");
+                    
+                    // Cálculo inteligente da duração do programa
+                    const durationMinutes = endTime.diff(startTimeRaw, 'minutes');
+                    const formattedDuration = durationMinutes > 0 ? `${durationMinutes} minutos` : "Menos de 1 minuto";
+
                     currentLives.splice(i, 1);
                     
-                    // CORREÇÃO: Agora o último parâmetro é 'true' para enviar ao Telegram!
+                    // Alimenta a lista de Histórico para o Recurso 5
+                    pastLives.unshift({
+                        id: videoId,
+                        title: liveTitle,
+                        date: startTimeRaw.format("DD/MM/YYYY"),
+                        startTime: startTimeRaw.format("HH:mm"),
+                        endTime: endTime.format("HH:mm"),
+                        duration: formattedDuration
+                    });
+
+                    if (pastLives.length > 30) pastLives.pop(); // Mantém os últimos 30 programas para não estourar memória
+
                     registrarEventoGlobal(
                         videoId + '-end', 
                         'idle', 
                         'Transmissão Encerrada', 
-                        `A rádio finalizou a live no YouTube:\n📺 <b>${liveTitle}</b>`, 
+                        `A rádio finalizou a live no YouTube:\n📺 <b>${liveTitle}</b>\n⏱️ <b>Duração total:</b> ${formattedDuration}`, 
                         true
                     );
                 }
             }
         }
 
-        // PASSO 2: MODO RASTREADOR
+        // PASSO 2: MODO RASTREADOR (Custa 100 Pontos)
         if (currentLives.length === 0) {
             const urlSearch = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${CHANNEL_ID}&eventType=live&type=video&key=${API_KEY}`;
             const res = await axios.get(urlSearch);
@@ -112,6 +200,7 @@ async function monitor() {
                 const videoId = item.id.videoId;
                 const title = item.snippet.title;
                 const thumbnailUrl = item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.default?.url || '';
+                const nowTime = moment().tz("America/Fortaleza");
 
                 if (!lastKnownLiveIds.has(videoId)) {
                     console.log(`Nova Live detectada: ${title}`);
@@ -128,7 +217,9 @@ async function monitor() {
                 currentLives.push({
                     id: videoId,
                     title: title,
-                    isLive: true
+                    isLive: true,
+                    startTime: nowTime.format("HH:mm"),
+                    startTimeRaw: nowTime // Guardado puro para calcular a duração exata depois
                 });
             }
 
@@ -141,42 +232,66 @@ async function monitor() {
     } catch (err) { 
         if (err.response && err.response.status === 429) {
             if (!erro429Notificado) {
-                console.error("Erro 429: Cota diária excedida. Silenciando alertas do Telegram até o reset.");
-                registrarEventoGlobal('erro-429', 'warning', 'Aviso de Limite da API', 'O limite de consultas do YouTube foi atingido. O monitoramento entrará em modo silencioso até a cota renovar de madrugada.', true);
+                registrarEventoGlobal('erro-429', 'warning', 'Aviso de Limite da API', 'O limite de consultas do YouTube foi atingido. O monitoramento entrará em modo silencioso.', true);
                 erro429Notificado = true; 
             } else {
                 registrarEventoGlobal('erro-429-wait', 'warning', 'Aguardando Cota', 'Aguardando o YouTube liberar o limite diário...', false);
             }
-        } else if (err.response && err.response.status === 403) {
-            console.error("Erro 403: Chave bloqueada.");
-            registrarEventoGlobal('erro-403', 'warning', 'Aviso de API Key', 'A chave do YouTube é inválida ou bloqueada.', true);
         } else {
             console.error("Erro na API do YouTube:", err.message); 
         }
     }
 }
 
+// ==========================================
+// ROTAS DA API (Endpoints)
+// ==========================================
+
+// Retorna dados para o painel (Inclui agora a lista do histórico recente para o Recurso 5)
 app.get('/api/status', (req, res) => {
     res.json({ 
         lives: currentLives, 
+        pastLives: pastLives, // Adicionado aqui! Agora o seu front-end pode ler essa lista e criar a aba secundária
         alerts: systemAlerts, 
         time: moment().tz("America/Fortaleza").format("HH:mm"),
         apiStatus: "ONLINE" 
     });
 });
 
+// RECURSO 4: ROTA DE DOWNLOAD DE RELATÓRIO COMERCIAL (Gera .CSV puro aceito pelo Excel)
+app.get('/api/report/download', (req, res) => {
+    // Cabeçalho estruturado do Excel
+    let csvContent = "\uFEFF"; // Garante os acentos corretos no Excel (UTF-8 BOM)
+    csvContent += "Data;Titulo do Programa;Horario de Inicio;Horario de Termino;Duracao Total\n";
+
+    if (pastLives.length === 0) {
+        csvContent += "---;Nenhuma transmissão salva no histórico ainda;---;---;---\n";
+    } else {
+        pastLives.forEach(live => {
+            // Remove pontos e vírgulas do título para não quebrar as colunas do Excel
+            const cleanTitle = live.title.replace(/;/g, ' ').replace(/\n/g, ' ');
+            csvContent += `${live.date};${cleanTitle};${live.startTime};${live.endTime};${live.duration}\n`;
+        });
+    }
+
+    // Configura o navegador do cliente para receber o arquivo como download oficial
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=relatorio_monitoramento_radio.csv');
+    res.status(200).send(csvContent);
+});
+
+// Execução inicial
 setInterval(monitor, 900000);
 
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
-    
     registrarEventoGlobal(
         'startup-' + Date.now(), 
         'idle', 
         'Monitoramento Online!', 
-        'O sistema da Rádio Jornal foi iniciado/reiniciado com sucesso.\n\n📡 Status: Ativo e vigiando o YouTube com sistema de economia de dados!', 
+        'O sistema da Rádio Jornal foi iniciado/reiniciado com sucesso.\n\n📡 Status: Ativo e automatizado com Inteligência de Comandos e Relatórios!', 
         true
     );
-    
     monitor();
+    processarComandosTelegram(); // Inicializa a escuta de comandos do Telegram
 });
