@@ -9,7 +9,8 @@ app.use(cors());
 // ==========================================
 // CONFIGURAÇÕES
 // ==========================================
-const API_KEY = 'AIzaSyAm4VfbHqxLDk3J4vRIZky3k_EwQo007MM';
+// Coloque sua NOVA chave aqui para zerar o limite 429
+const API_KEY = 'AIzaSyDOpCDRyn4knLVv5mfABC3Ih0ozRVCJNOw'; 
 const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ';
 const TELEGRAM_TOKEN = '8951777069:AAHbb5vc0uf104_ZJzSgFesHBqk_4lgaySQ';
 const TELEGRAM_CHAT_ID = '-5294989968';
@@ -20,12 +21,11 @@ let currentLives = [];
 let systemAlerts = [];
 let lastKnownLiveIds = new Set();
 
-// Função adaptada para enviar foto com legenda formatada
+// Envio para o Telegram
 async function enviarTelegramComFoto(photoUrl, msg) {
     if (!TELEGRAM_TOKEN) return;
     try {
         if (photoUrl) {
-            // Se houver uma thumbnail, envia usando o método sendPhoto
             await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendPhoto`, {
                 chat_id: TELEGRAM_CHAT_ID,
                 photo: photoUrl,
@@ -33,75 +33,106 @@ async function enviarTelegramComFoto(photoUrl, msg) {
                 parse_mode: 'HTML'
             });
         } else {
-            // Caso falte a imagem por algum motivo, envia apenas o texto como segurança
             await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
                 chat_id: TELEGRAM_CHAT_ID,
                 text: msg,
                 parse_mode: 'HTML'
             });
         }
-        console.log("Notificação com thumbnail enviada ao Telegram.");
     } catch (e) { 
         console.error("Erro ao enviar para o Telegram:", e.message); 
     }
 }
 
+// Log Unificado (Painel + Telegram)
+async function registrarEventoGlobal(id, tipo, titulo, detalhe, enviarProTelegram = true) {
+    systemAlerts.unshift({ 
+        id: id, 
+        type: tipo, 
+        title: titulo, 
+        detail: detalhe, 
+        time: moment().tz("America/Fortaleza").format("HH:mm") 
+    });
+
+    if (systemAlerts.length > 50) systemAlerts.pop();
+
+    if (enviarProTelegram) {
+        let icone = "ℹ️";
+        if (tipo === "warning") icone = "⚠️";
+        if (tipo === "alert") icone = "🚨";
+        if (tipo === "success" || tipo === "idle") icone = "🔄";
+
+        const msgTelegram = `${icone} <b>${titulo}</b>\n\n${detalhe}`;
+        await enviarTelegramComFoto(null, msgTelegram);
+    }
+}
+
+// ==========================================
+// O MOTOR INTELIGENTE (Economia de API)
+// ==========================================
 async function monitor() {
     try {
-        const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${CHANNEL_ID}&eventType=live&type=video&key=${API_KEY}`;
-        const res = await axios.get(url);
-        const lives = res.data.items || [];
-        
-        for (const item of lives) {
-            const videoId = item.id.videoId;
-            const title = item.snippet.title;
-            
-            // Captura a URL da capa em alta resolução (se não houver, pega a padrão)
-            const thumbnailUrl = item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.default?.url || '';
+        // PASSO 1: MODO ECONÔMICO (Custa apenas 1 Ponto)
+        // Se já sabemos que tem uma live rodando, apenas verificamos se ela continua aberta
+        if (currentLives.length > 0) {
+            for (let i = currentLives.length - 1; i >= 0; i--) {
+                const videoId = currentLives[i].id;
+                const urlVideos = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${API_KEY}`;
+                
+                const res = await axios.get(urlVideos);
+                const item = res.data.items[0];
 
-            if (!lastKnownLiveIds.has(videoId)) {
-                console.log(`Nova Live detectada: ${title}`);
-                
-                // Texto que vai aparecer como legenda da imagem
-                const mensagem = `🚨 <b>RÁDIO JORNAL AO VIVO</b>\n\n` +
-                                 `📺 <b>${title}</b>\n\n` +
-                                 `🔗 <a href="https://youtube.com/watch?v=${videoId}">Clique aqui para assistir</a>`;
-                
-                // Dispara o envio passando a imagem e a legenda
-                await enviarTelegramComFoto(thumbnailUrl, mensagem);
-                
-                systemAlerts.unshift({ 
-                    id: videoId, 
-                    type: 'alert', 
-                    title: 'Nova Live Iniciada', 
-                    detail: title, 
-                    time: moment().tz("America/Fortaleza").format("HH:mm") 
-                });
-                
-                lastKnownLiveIds.add(videoId);
+                // Se o vídeo sumiu ou o status mudou de 'live' para 'none', a transmissão acabou
+                if (!item || item.snippet.liveBroadcastContent !== 'live') {
+                    console.log(`Live encerrada: ${currentLives[i].title}`);
+                    currentLives.splice(i, 1);
+                    registrarEventoGlobal(videoId + '-end', 'idle', 'Transmissão Encerrada', 'A rádio finalizou a live no YouTube.', false);
+                }
             }
         }
 
-        const currentIds = new Set(lives.map(l => l.id.videoId));
-        lastKnownLiveIds = new Set([...lastKnownLiveIds].filter(id => currentIds.has(id)));
+        // PASSO 2: MODO RASTREADOR (Custa 100 Pontos)
+        // Só fazemos a busca cara se NÃO houver nenhuma live ativa na nossa memória no momento
+        if (currentLives.length === 0) {
+            const urlSearch = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${CHANNEL_ID}&eventType=live&type=video&key=${API_KEY}`;
+            const res = await axios.get(urlSearch);
+            const lives = res.data.items || [];
+            
+            for (const item of lives) {
+                const videoId = item.id.videoId;
+                const title = item.snippet.title;
+                const thumbnailUrl = item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.default?.url || '';
 
-        currentLives = lives.map(item => ({
-            id: item.id.videoId,
-            title: item.snippet.title,
-            isLive: true
-        }));
+                if (!lastKnownLiveIds.has(videoId)) {
+                    console.log(`Nova Live detectada: ${title}`);
+                    
+                    const mensagem = `🚨 <b>RÁDIO JORNAL AO VIVO</b>\n\n` +
+                                     `📺 <b>${title}</b>\n\n` +
+                                     `🔗 <a href="https://youtube.com/watch?v=${videoId}">Clique aqui para assistir</a>`;
+                    
+                    await enviarTelegramComFoto(thumbnailUrl, mensagem);
+                    registrarEventoGlobal(videoId, 'alert', 'Nova Live Iniciada', title, false);
+                    lastKnownLiveIds.add(videoId);
+                }
+                
+                currentLives.push({
+                    id: videoId,
+                    title: title,
+                    isLive: true
+                });
+            }
+
+            const currentIds = new Set(lives.map(l => l.id.videoId));
+            lastKnownLiveIds = new Set([...lastKnownLiveIds].filter(id => currentIds.has(id)));
+        }
 
     } catch (err) { 
-        // Tratamento específico para o erro 429
         if (err.response && err.response.status === 429) {
             console.error("Erro 429: Cota diária do YouTube excedida.");
-            systemAlerts.unshift({ 
-                id: 'erro-429', 
-                type: 'warning', 
-                title: 'Aviso de Limite da API', 
-                detail: 'O limite de consultas do YouTube foi atingido. O monitoramento retornará amanhã.', 
-                time: moment().tz("America/Fortaleza").format("HH:mm") 
-            });
+            registrarEventoGlobal('erro-429', 'warning', 'Aviso de Limite da API', 'O limite de consultas do YouTube foi atingido. O monitoramento retornará amanhã.', true);
+        } else if (err.response && err.response.status === 403) {
+            console.error("Erro 403: Chave bloqueada.");
+            registrarEventoGlobal('erro-403', 'warning', 'Aviso de API Key', 'A chave do YouTube é inválida ou bloqueada.', true);
         } else {
             console.error("Erro na API do YouTube:", err.message); 
         }
@@ -117,10 +148,19 @@ app.get('/api/status', (req, res) => {
     });
 });
 
-// ALERTA CORRIGIDO: Intervalo alterado para 15 minutos (900000 ms) para nunca mais dar erro 429
+// Intervalo de 15 minutos (900000ms). Com o modo inteligente, o limite de 10.000 nunca mais será estourado.
 setInterval(monitor, 900000);
-monitor();
 
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
+    
+    registrarEventoGlobal(
+        'startup-' + Date.now(), 
+        'idle', 
+        'Monitoramento Online!', 
+        'O sistema da Rádio Jornal foi iniciado/reiniciado com sucesso.\n\n📡 Status: Ativo e vigiando o YouTube com sistema de economia de dados!', 
+        true
+    );
+    
+    monitor();
 });
