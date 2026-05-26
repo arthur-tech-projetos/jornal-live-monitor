@@ -277,7 +277,6 @@ app.get('/api/status', async (req, res) => {
     } catch (err) { res.status(500).json({ error: "Erro ao buscar dados no banco" }); }
 });
 
-// NOVA ROTA PARA LIMPAR LOGS DE ATIVIDADE
 app.delete('/api/alerts', async (req, res) => {
     try {
         await Alerta.deleteMany({});
@@ -311,7 +310,7 @@ app.get('/api/report/download', async (req, res) => {
 });
 
 // ==========================================
-// GERADOR DE PDF
+// GERADOR DE PDF (COM LAYOUT ALINHADO PARA CABER A HORA)
 // ==========================================
 app.get('/api/report/pdf', async (req, res) => {
     try {
@@ -365,12 +364,13 @@ app.get('/api/report/pdf', async (req, res) => {
 
         doc.rect(50, y - 5, 495, 20).fill('#f2f2f2');
         
+        // --- NOVO ESPAÇAMENTO DAS COLUNAS ---
         doc.font('Arial-Bold').fontSize(9).fillColor('#000000');
         doc.text('DATA', 55, y);
-        doc.text('TÍTULO DA TRANSMISSÃO', 120, y);
-        doc.text('INÍCIO', 350, y);
-        doc.text('TÉRMINO', 410, y);
-        doc.text('DURAÇÃO', 480, y);
+        doc.text('TÍTULO DA TRANSMISSÃO', 115, y);
+        doc.text('INÍCIO', 330, y);
+        doc.text('TÉRMINO', 385, y);
+        doc.text('DURAÇÃO', 445, y); // Mais para a esquerda, dando respiro para a duração longa
         doc.moveTo(50, y + 15).lineTo(545, y + 15).lineWidth(1).strokeColor('#cccccc').stroke();
 
         y += 25;
@@ -385,11 +385,16 @@ app.get('/api/report/pdf', async (req, res) => {
 
                 doc.fillColor('#333333');
                 doc.text(live.date, 55, y);
+                
+                // O limite de caracteres continua 40, cabe certinho no novo layout
                 const tituloCurto = live.title.length > 40 ? live.title.substring(0, 38) + "..." : live.title;
-                doc.text(tituloCurto, 120, y);
-                doc.text(live.startTime, 350, y);
-                doc.text(live.endTime, 410, y); 
-                doc.text(formatarDuracaoInteligente(live.duration), 480, y);
+                doc.text(tituloCurto, 115, y);
+                
+                doc.text(live.startTime, 330, y);
+                doc.text(live.endTime, 385, y); 
+                
+                // Agora o texto "1 hora e 59 minutos" tem muito espaço!
+                doc.text(formatarDuracaoInteligente(live.duration), 445, y);
                 
                 doc.moveTo(50, y + 15).lineTo(545, y + 15).lineWidth(0.5).strokeColor('#eeeeee').stroke();
                 y += 25;
