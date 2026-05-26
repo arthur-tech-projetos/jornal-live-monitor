@@ -136,7 +136,7 @@ async function processarComandosTelegram() {
             const text = update.message.text.trim();
 
             if (text === '/status') {
-                let statusMsg = `📊 <b>CENTRAL DE COMANDO - ARTHUR TECH</b>\n\n`;
+                let statusMsg = `📊 <b>CENTRAL DE COMANDO - MONITOR RÁDIO JORNAL</b>\n\n`;
                 statusMsg += `🖥️ <b>API Status:</b> ONLINE 🟢\n`;
                 statusMsg += `🕒 <b>Horário Local:</b> ${moment().tz("America/Fortaleza").format("HH:mm:ss")}\n\n`;
 
@@ -385,7 +385,6 @@ app.get('/api/report/pdf', async (req, res) => {
                 doc.text(live.startTime, 350, y);
                 doc.text(live.endTime, 410, y); 
                 
-                // === A MÁGICA ACONTECE AQUI ===
                 // Ele pega os "119 minutos" do banco de dados e calcula na hora da impressão!
                 doc.text(formatarDuracaoInteligente(live.duration), 480, y);
                 
@@ -398,7 +397,8 @@ app.get('/api/report/pdf', async (req, res) => {
         for (let i = 0; i < pages.count; i++) {
             doc.switchToPage(i);
             doc.font('Arial').fontSize(8).fillColor('#888888');
-            doc.text('Gerado pelo Sistema Arthur Tech', 50, 780);
+            // SEU CRÉDITO NO RODAPÉ:
+            doc.text('Gerado pelo Monitor Rádio Jornal - Desenvolvido por Arthur Tech', 50, 780);
             doc.text(`Página ${i + 1} de ${pages.count}`, 450, 780, { align: 'right' });
         }
         doc.end();
@@ -413,7 +413,7 @@ app.listen(PORT, () => {
     registrarEventoGlobal(
         'startup-' + Date.now(), 
         'success', 
-        'SISTEMA ARTHUR TECH INICIADO', 
+        'SISTEMA MONITOR RÁDIO JORNAL INICIADO', 
         'O núcleo de monitoramento da Rádio Jornal está online e operando em capacidade máxima.\n\n📡 Conexão com Banco: Estável\n▶️ Robô do YouTube: Vigiando', 
         true
     );
