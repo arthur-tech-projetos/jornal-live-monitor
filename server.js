@@ -19,9 +19,11 @@ const API_KEY = 'AIzaSyDZ6OzN-CDu2J0lMWpG0qsADvNWvlfIQoc';
 const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ';
 const TELEGRAM_TOKEN = '8951777069:AAHbb5vc0uf104_ZJzSgFesHBqk_4lgaySQ';
 const TELEGRAM_CHAT_ID = '-5294989968';
-const MONGODB_URI = process.env.MONGODB_URI;
 
-mongoose.connect(MONGODB_URI).then(() => console.log(">>> Banco OK"));
+// --- CONFIGURAÇÕES ---
+// Removemos o "process.env.MONGODB_URI ||" para forçar a conexão direta e evitar erros de "undefined"
+const MONGODB_URI = 'mongodb+srv://arthur:Arthur12%40XP@cluster0.nrt11po.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+const PORT = process.env.PORT || 10000;
 
 const Alerta = mongoose.model('Alerta', new mongoose.Schema({ title: String, detail: String, type: String, time: String, createdAt: { type: Date, default: Date.now } }));
 const LivePassada = mongoose.model('LivePassada', new mongoose.Schema({ title: String, date: String, startTime: String, endTime: String, duration: String, createdAt: { type: Date, default: Date.now } }));
