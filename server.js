@@ -412,7 +412,7 @@ app.get('/api/report/pdf', async (req, res) => {
     } catch (err) { res.status(500).send("Erro ao gerar PDF."); }
 });
 
-setInterval(monitor, 900000);
+setInterval(monitor, 60000);
 
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
