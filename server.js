@@ -19,7 +19,7 @@ moment.tz.setDefault("America/Fortaleza");
 const API_KEY = 'AIzaSyDZ6OzN-CDu2J0lMWpG0qsADvNWvlfIQoc'; 
 const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ';
 const TELEGRAM_TOKEN = '8881818050:AAFZSOn231TQXWiuvyfJX_xq7LIjrbhStlA'; // Token limpo confirmado!
-const TELEGRAM_CHAT_ID = '-5294989968';
+const TELEGRAM_CHAT_ID = '-1003937290720';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arthur:Arthur12%40XP@cluster0.nrt11po.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 const PORT = process.env.PORT || 10000;
