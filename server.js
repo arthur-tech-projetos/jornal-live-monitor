@@ -50,15 +50,11 @@ const LivePassada = mongoose.model('LivePassada', LivePassadaSchema);
 // ==========================================
 function formatarDuracaoInteligente(valor) {
     if (!valor) return "Desconhecida";
-    
-    // Se já estiver formatado com "hora", ou for menor que 1 min, devolve direto
     if (typeof valor === 'string' && valor.includes("hora")) return valor;
     if (typeof valor === 'string' && valor.includes("Menos")) return valor;
 
-    // Extrai apenas o número (seja da string "119 minutos" do banco ou do número bruto)
     const minutos = typeof valor === 'string' ? parseInt(valor.replace(/\D/g, ''), 10) : parseInt(valor, 10);
-    
-    if (isNaN(minutos)) return valor; // Trava de segurança
+    if (isNaN(minutos)) return valor; 
 
     if (minutos < 60) return `${minutos} minuto${minutos !== 1 ? 's' : ''}`;
     
@@ -281,6 +277,16 @@ app.get('/api/status', async (req, res) => {
     } catch (err) { res.status(500).json({ error: "Erro ao buscar dados no banco" }); }
 });
 
+// NOVA ROTA PARA LIMPAR LOGS DE ATIVIDADE
+app.delete('/api/alerts', async (req, res) => {
+    try {
+        await Alerta.deleteMany({});
+        res.json({ success: true, message: "Todos os logs foram apagados." });
+    } catch (err) {
+        res.status(500).json({ error: "Erro ao tentar limpar os logs." });
+    }
+});
+
 app.get('/api/report/download', async (req, res) => {
     try {
         const todasAsLives = await LivePassada.find().sort({ createdAt: -1 });
@@ -305,11 +311,10 @@ app.get('/api/report/download', async (req, res) => {
 });
 
 // ==========================================
-// GERADOR DE PDF (ALINHAMENTO, NEGRITO, MATEMÁTICA E FILTRO)
+// GERADOR DE PDF
 // ==========================================
 app.get('/api/report/pdf', async (req, res) => {
     try {
-        // Lógica de filtro por data
         const filtroData = req.query.date; 
         const queryDB = filtroData ? { date: filtroData } : {}; 
         
@@ -384,8 +389,6 @@ app.get('/api/report/pdf', async (req, res) => {
                 doc.text(tituloCurto, 120, y);
                 doc.text(live.startTime, 350, y);
                 doc.text(live.endTime, 410, y); 
-                
-                // Ele pega os "119 minutos" do banco de dados e calcula na hora da impressão!
                 doc.text(formatarDuracaoInteligente(live.duration), 480, y);
                 
                 doc.moveTo(50, y + 15).lineTo(545, y + 15).lineWidth(0.5).strokeColor('#eeeeee').stroke();
@@ -397,7 +400,6 @@ app.get('/api/report/pdf', async (req, res) => {
         for (let i = 0; i < pages.count; i++) {
             doc.switchToPage(i);
             doc.font('Arial').fontSize(8).fillColor('#888888');
-            // SEU CRÉDITO NO RODAPÉ:
             doc.text('Gerado pelo Monitor Rádio Jornal - Desenvolvido por Arthur Tech', 50, 780);
             doc.text(`Página ${i + 1} de ${pages.count}`, 450, 780, { align: 'right' });
         }
