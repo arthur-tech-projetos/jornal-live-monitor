@@ -46,15 +46,29 @@ const LivePassadaSchema = new mongoose.Schema({
 const LivePassada = mongoose.model('LivePassada', LivePassadaSchema);
 
 // ==========================================
-// FUNÇÃO DE FORMATAR MINUTOS EM HORAS
+// A MATEMÁTICA INTELIGENTE DE HORAS
 // ==========================================
-function formatarDuracao(minutos) {
+function formatarDuracaoInteligente(valor) {
+    if (!valor) return "Desconhecida";
+    
+    // Se já estiver formatado com "hora", ou for menor que 1 min, devolve direto
+    if (typeof valor === 'string' && valor.includes("hora")) return valor;
+    if (typeof valor === 'string' && valor.includes("Menos")) return valor;
+
+    // Extrai apenas o número (seja da string "119 minutos" do banco ou do número bruto)
+    const minutos = typeof valor === 'string' ? parseInt(valor.replace(/\D/g, ''), 10) : parseInt(valor, 10);
+    
+    if (isNaN(minutos)) return valor; // Trava de segurança
+
     if (minutos < 60) return `${minutos} minuto${minutos !== 1 ? 's' : ''}`;
+    
     const horas = Math.floor(minutos / 60);
     const minRestantes = minutos % 60;
+    
     let textoHoras = `${horas} hora${horas !== 1 ? 's' : ''}`;
     if (minRestantes === 0) return textoHoras;
-    return `${textoHoras} e ${minRestantes}m`;
+    
+    return `${textoHoras} e ${minRestantes} minuto${minRestantes !== 1 ? 's' : ''}`;
 }
 
 // ==========================================
@@ -79,7 +93,6 @@ async function enviarTelegramComFoto(photoUrl, msg) {
 
 async function registrarEventoGlobal(id, tipo, titulo, detalhe, enviarProTelegram = true) {
     try {
-        // Limpador de tags HTML: Garante que "<b>" não seja salvo no banco
         const detalheLimpo = detalhe.replace(/<[^>]*>?/gm, ''); 
 
         await Alerta.create({
@@ -101,7 +114,6 @@ async function registrarEventoGlobal(id, tipo, titulo, detalhe, enviarProTelegra
         if (tipo === "idle") icone = "🔄";
         if (titulo === "Transmissão Encerrada") icone = "🛑";
 
-        // Manda com <b> para o Telegram ficar bonito
         const msgTelegram = `${icone} <b>${titulo}</b>\n\n${detalhe}`;
         await enviarTelegramComFoto(null, msgTelegram);
     }
@@ -185,7 +197,7 @@ async function monitor() {
                     const endTime = moment().tz("America/Fortaleza");
                     
                     const durationMinutes = endTime.diff(startTimeRaw, 'minutes');
-                    const formattedDuration = durationMinutes > 0 ? formatarDuracao(durationMinutes) : "Menos de 1 minuto";
+                    const formattedDuration = durationMinutes > 0 ? formatarDuracaoInteligente(durationMinutes) : "Menos de 1 minuto";
 
                     currentLives.splice(i, 1);
                     
@@ -258,7 +270,7 @@ async function monitor() {
 }
 
 // ==========================================
-// ROTAS DA API (Endpoints)
+// ROTAS DA API
 // ==========================================
 app.get('/api/status', async (req, res) => {
     try {
@@ -280,7 +292,7 @@ app.get('/api/report/download', async (req, res) => {
         } else {
             todasAsLives.forEach(live => {
                 const cleanTitle = live.title.replace(/;/g, ' ').replace(/\n/g, ' ');
-                csvContent += `${live.date};${cleanTitle};${live.startTime};${live.endTime};${live.duration}\n`;
+                csvContent += `${live.date};${cleanTitle};${live.startTime};${live.endTime};${formatarDuracaoInteligente(live.duration)}\n`;
             });
         }
 
@@ -293,35 +305,32 @@ app.get('/api/report/download', async (req, res) => {
 });
 
 // ==========================================
-// GERADOR DE PDF (NOVIDADE: Filtro de Data e arial-bold)
+// GERADOR DE PDF (ALINHAMENTO, NEGRITO, MATEMÁTICA E FILTRO)
 // ==========================================
 app.get('/api/report/pdf', async (req, res) => {
     try {
-        // Lógica para filtrar por data (Ex: ?date=26/05/2026)
+        // Lógica de filtro por data
         const filtroData = req.query.date; 
         const queryDB = filtroData ? { date: filtroData } : {}; 
         
         const todasAsLives = await LivePassada.find(queryDB).sort({ createdAt: -1 });
 
         res.setHeader('Content-Type', 'application/pdf');
-        
-        // Se tiver filtro, o arquivo é baixado com a data no nome
         const nomeArquivo = filtroData ? `relatorio_radio_jornal_${filtroData.replace(/\//g, '-')}.pdf` : 'relatorio_radio_jornal.pdf';
         res.setHeader('Content-Disposition', `inline; filename=${nomeArquivo}`);
 
         const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
         doc.pipe(res);
 
-        // Registro Inteligente das Fontes
         const fontPath = path.join(__dirname, 'arial.ttf');
         const fontBoldPath = path.join(__dirname, 'arial-bold.ttf');
         
         if (fs.existsSync(fontPath)) {
             doc.registerFont('Arial', fontPath);
             if (fs.existsSync(fontBoldPath)) {
-                doc.registerFont('Arial-Bold', fontBoldPath); // Usa a sua fonte arial-bold
+                doc.registerFont('Arial-Bold', fontBoldPath);
             } else {
-                doc.registerFont('Arial-Bold', fontPath); // Se não achar o bold, usa o Arial normal como proteção
+                doc.registerFont('Arial-Bold', fontPath);
             }
         } else {
             doc.registerFont('Arial', 'Helvetica');
@@ -330,17 +339,13 @@ app.get('/api/report/pdf', async (req, res) => {
 
         if (fs.existsSync('logo.png')) doc.image('logo.png', 50, 40, { width: 120 });
         
-        // APENAS RELATÓRIO EM NEGRITO E À DIREITA
         doc.font('Arial-Bold').fontSize(18).fillColor('#555555').text('RELATÓRIO', 400, 55, { align: 'right' });
-        
-        // LINHA VERMELHA
         doc.moveTo(50, 95).lineTo(545, 95).lineWidth(2).strokeColor('#e60000').stroke();
 
         const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
         const hoje = moment().tz("America/Fortaleza");
         const dataFormatada = `${hoje.format('DD')} de ${meses[hoje.month()]} de ${hoje.format('YYYY')} às ${hoje.format('HH:mm')}`;
 
-        // TEXTO FORÇADO NA MARGEM ESQUERDA (X: 50)
         doc.font('Arial').fontSize(10).fillColor('#333333');
         doc.text(`Documento: Relatório Oficial de Monitoramento de Grade (YouTube)`, 50, 115);
         doc.text(`Gerado em: ${dataFormatada}`, 50, 130);
@@ -348,16 +353,13 @@ app.get('/api/report/pdf', async (req, res) => {
 
         let y = 175; 
         
-        // Se existir um filtro, avisa no PDF e empurra a tabela um pouco pra baixo
         if (filtroData) {
             doc.font('Arial-Bold').fillColor('#e60000').text(`Filtro Aplicado: Transmissões do dia ${filtroData}`, 50, 160);
             y = 190;
         }
 
-        // TABELA COMEÇA FIXA ABAIXO DAS INFORMAÇÕES
         doc.rect(50, y - 5, 495, 20).fill('#f2f2f2');
         
-        // CABEÇALHO DA TABELA EM NEGRITO
         doc.font('Arial-Bold').fontSize(9).fillColor('#000000');
         doc.text('DATA', 55, y);
         doc.text('TÍTULO DA TRANSMISSÃO', 120, y);
@@ -367,7 +369,7 @@ app.get('/api/report/pdf', async (req, res) => {
         doc.moveTo(50, y + 15).lineTo(545, y + 15).lineWidth(1).strokeColor('#cccccc').stroke();
 
         y += 25;
-        doc.font('Arial').fontSize(9).fillColor('#333333'); // Corpo da tabela volta a ser Fonte normal
+        doc.font('Arial').fontSize(9).fillColor('#333333');
 
         if (todasAsLives.length === 0) {
             doc.text("Nenhuma transmissão encontrada para a data selecionada.", 55, y);
@@ -382,7 +384,10 @@ app.get('/api/report/pdf', async (req, res) => {
                 doc.text(tituloCurto, 120, y);
                 doc.text(live.startTime, 350, y);
                 doc.text(live.endTime, 410, y); 
-                doc.text(live.duration, 480, y);
+                
+                // === A MÁGICA ACONTECE AQUI ===
+                // Ele pega os "119 minutos" do banco de dados e calcula na hora da impressão!
+                doc.text(formatarDuracaoInteligente(live.duration), 480, y);
                 
                 doc.moveTo(50, y + 15).lineTo(545, y + 15).lineWidth(0.5).strokeColor('#eeeeee').stroke();
                 y += 25;
