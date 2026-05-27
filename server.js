@@ -20,7 +20,7 @@ const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ';
 const TELEGRAM_TOKEN = '8881818050:AAFZSOn231TQXWiuvyfJX_xq7LIjrbhStlA';
 
 // MÁGICA AQUI: O ID novo do seu Supergrupo!
-const TELEGRAM_CHAT_ID = '-1005294989968';
+const TELEGRAM_CHAT_ID = '-3937290720';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arthur:Arthur12%40XP@cluster0.nrt11po.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 
