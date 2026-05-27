@@ -15,12 +15,20 @@ app.use(cors());
 // ==========================================
 // CONFIGURAÇÕES E CONEXÃO COM O BANCO
 // ==========================================
-const API_KEY = 'AIzaSyBGoaNHJY1_4wY2kKpIKlFn37gwv-PfMW4'; 
+
+// 🔥 SISTEMA DE ROTAÇÃO DE APIS DO YOUTUBE 🔥
+// Coloque quantas chaves quiser separadas por vírgula.
+const YOUTUBE_API_KEYS = [
+    'AIzaSyDZ6OzN-CDu2J0lMWpG0qsADvNWvlfIQoc', // Chave Principal (A que você já usava)
+    'AIzaSyDOpCDRyn4knLVv5mfABC3Ih0ozRVCJNOw',               // Chave Reserva 1
+    'AIzaSyBGoaNHJY1_4wY2kKpIKlFn37gwv-PfMW4',              // Chave Reserva 2
+];
+let currentApiKeyIndex = 0; // O sistema começa apontando para a primeira chave (índice 0)
+
 const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ';
 const TELEGRAM_TOKEN = '8881818050:AAFZSOn231TQXWiuvyfJX_xq7LIjrbhStlA';
 
-// MUDANÇA AQUI: Usando 'let' para o bot aprender o ID sozinho!
-let TELEGRAM_CHAT_ID = '-1003937290720'; 
+let TELEGRAM_CHAT_ID = '-1005294989968'; 
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arthur:Arthur12%40XP@cluster0.nrt11po.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 
@@ -131,13 +139,10 @@ async function processarComandosTelegram() {
             const chatId = update.message.chat.id.toString();
             const text = update.message.text.trim();
 
-            // === AUTO-APRENDIZADO DE ID ===
-            // O bot olha o ID do grupo onde ele recebeu a mensagem e se ajusta sozinho!
             if (TELEGRAM_CHAT_ID !== chatId) {
                 TELEGRAM_CHAT_ID = chatId;
-                console.log(`🚨 ID DO GRUPO ATUALIZADO AUTOMATICAMENTE PARA: ${TELEGRAM_CHAT_ID} 🚨`);
+                console.log(`🚨 ID DO GRUPO ATUALIZADO PARA: ${TELEGRAM_CHAT_ID} 🚨`);
             }
-            // ==============================
 
             if (text === '/status') {
                 let statusMsg = `📊 <b>CENTRAL DE COMANDO - ARTHUR TECH</b>\n\n`;
@@ -196,10 +201,13 @@ async function processarComandosTelegram() {
 }
 
 // ==========================================
-// MOTOR INTELIGENTE DE BUSCA (Multi-Marchas)
+// MOTOR INTELIGENTE DE BUSCA (Restauração e Rotação)
 // ==========================================
 async function monitor() {
     try {
+        // 🔥 PUXA A CHAVE DA VEZ 🔥
+        const API_KEY = YOUTUBE_API_KEYS[currentApiKeyIndex]; 
+
         if (currentLives.length > 0) {
             for (let i = currentLives.length - 1; i >= 0; i--) {
                 const videoId = currentLives[i].id;
@@ -208,9 +216,8 @@ async function monitor() {
                 const res = await axios.get(urlVideos);
                 const item = res.data.items[0];
 
-                // === ALERTA DE TEMPO EXCEDIDO (OVERTIME) ===
                 const tempoNoAr = moment().tz("America/Fortaleza").diff(moment(currentLives[i].startTimeRaw), 'minutes');
-                let limite = 120; // 2 horas padrão
+                let limite = 120; 
                 
                 const tituloUpper = currentLives[i].title.toUpperCase();
                 if (tituloUpper.includes("JORNAL DA TARDE")) limite = 95; 
@@ -226,7 +233,6 @@ async function monitor() {
                         true
                     );
                 }
-                // ===========================================
 
                 if (!item || item.snippet.liveBroadcastContent !== 'live') {
                     const liveTitle = currentLives[i].title;
@@ -295,15 +301,27 @@ async function monitor() {
             lastKnownLiveIds = new Set([...lastKnownLiveIds].filter(id => currentIds.has(id)));
         }
 
-        erro429Notificado = false;
+        erro429Notificado = false; // Se funcionou, reseta o aviso
 
     } catch (err) { 
-        if (err.response && err.response.status === 429) {
-            if (!erro429Notificado) {
-                await registrarEventoGlobal('erro-429', 'warning', 'Aviso de Limite da API', 'O limite de consultas do YouTube foi atingido. O monitoramento entrará em modo silencioso.', true);
-                erro429Notificado = true; 
+        // 🔥 A MÁGICA DA ROTAÇÃO ACONTECE AQUI 🔥
+        if (err.response && (err.response.status === 429 || err.response.status === 403)) {
+            // Verifica se tem uma próxima API na lista
+            if (currentApiKeyIndex < YOUTUBE_API_KEYS.length - 1) {
+                currentApiKeyIndex++; // Pula pra próxima
+                await registrarEventoGlobal(
+                    'rota-api-' + Date.now(), 
+                    'warning', 
+                    'Rotação Automática de API 🔄', 
+                    `A cota da Chave ${currentApiKeyIndex} esgotou. O sistema migrou instantaneamente para a Chave de Reserva ${currentApiKeyIndex + 1} para não perder a cobertura.`, 
+                    true
+                );
             } else {
-                await registrarEventoGlobal('erro-429-wait', 'warning', 'Aguardando Cota', 'Aguardando o YouTube liberar o limite diário...', false);
+                // Se esgotou todas as chaves
+                if (!erro429Notificado) {
+                    await registrarEventoGlobal('erro-429', 'alert', 'Alerta Crítico: Limite Geral de APIs', 'O sistema consumiu todas as chaves de API disponíveis no servidor. O monitoramento de novas lives entrará em espera até a renovação da cota.', true);
+                    erro429Notificado = true; 
+                }
             }
         } else {
             console.error("Erro na API do YouTube:", err.message); 
@@ -312,7 +330,7 @@ async function monitor() {
 }
 
 // ==========================================
-// ROTAS DA API (Endpoints)
+// ROTAS DA API (Endpoints e PDF)
 // ==========================================
 app.get('/api/status', async (req, res) => {
     try {
@@ -354,9 +372,6 @@ app.get('/api/report/download', async (req, res) => {
     }
 });
 
-// ==========================================
-// ROTA PDF (ESTILIZADA E COM AUTO-CORREÇÃO)
-// ==========================================
 app.get('/api/report/pdf', async (req, res) => {
     try {
         const todasAsLives = await LivePassada.find().sort({ createdAt: -1 });
@@ -367,37 +382,37 @@ app.get('/api/report/pdf', async (req, res) => {
         const doc = new PDFDocument({ size: 'A4', margin: 50 });
         doc.pipe(res);
 
-        // --- FONTE ---
+        // --- FONTES (Normal e Negrito) ---
         const fontPath = path.join(__dirname, 'arial.ttf');
         if (fs.existsSync(fontPath)) doc.registerFont('Arial', fontPath);
         else doc.registerFont('Arial', 'Helvetica');
 
-        // --- 1. LOGO E CABEÇALHO ---
-        if (fs.existsSync('logo.png')) {
-            doc.image('logo.png', 50, 45, { fit: [120, 60] });
-        }
+        // 🔥 NOVIDADE: Registrando o arquivo Arial Bold que vi na sua pasta 🔥
+        const fontBoldPath = path.join(__dirname, 'arial-bold.ttf');
+        if (fs.existsSync(fontBoldPath)) doc.registerFont('Arial-Bold', fontBoldPath);
+        else doc.registerFont('Arial-Bold', 'Helvetica-Bold');
+
+        if (fs.existsSync('logo.png')) doc.image('logo.png', 50, 45, { fit: [120, 60] });
         
-        doc.font('Arial').fontSize(20).fillColor('#555555').text('RELATÓRIO', 400, 55, { align: 'right' });
+        // Chamando a fonte Arial-Bold para o "RELATÓRIO"
+        doc.font('Arial-Bold').fontSize(20).fillColor('#555555').text('RELATÓRIO', 400, 55, { align: 'right' });
         doc.moveTo(50, 110).lineTo(545, 110).lineWidth(3).strokeColor('#e60000').stroke();
 
-        // --- 2. INFORMAÇÕES DO DOCUMENTO ---
         doc.font('Arial').fontSize(10).fillColor('#000000');
         doc.text(`Documento: Relatório Oficial de Monitoramento de Grade (YouTube)`, 50, 130);
         doc.text(`Gerado em: ${moment().tz("America/Fortaleza").format("DD/MM/YYYY [às] HH:mm")}`, 50, 145);
         doc.text(`Emissora: Rádio Jornal Meio Norte - Teresina, Piauí`, 50, 160);
 
-        // --- 3. CABEÇALHO DA TABELA (Espaçamento Ajustado) ---
-        doc.font('Arial').fontSize(9).fillColor('#000000');
+        doc.font('Arial-Bold').fontSize(9).fillColor('#000000');
         doc.text('DATA', 50, 200);
-        doc.text('TÍTULO DA TRANSMISSÃO', 110, 200); // Mais espaço para a data
+        doc.text('TÍTULO DA TRANSMISSÃO', 110, 200); 
         doc.text('INÍCIO', 350, 200);
         doc.text('TÉRMINO', 410, 200);
         doc.text('DURAÇÃO', 470, 200);
         
         doc.moveTo(50, 215).lineTo(545, 215).lineWidth(1).strokeColor('#cccccc').stroke();
 
-        // --- 4. LINHAS DOS DADOS ---
-        let y = 235; // Começa um pouco mais abaixo da linha
+        let y = 235; 
         doc.font('Arial').fontSize(9).fillColor('#333333');
         
         todasAsLives.forEach((live) => {
@@ -409,16 +424,12 @@ app.get('/api/report/pdf', async (req, res) => {
             let displayInicio = live.startTime || "--:--";
             let displayTermino = live.endTime || "--:--";
 
-            // 🔥 MÁGICA: Auto-correção de horários invertidos 🔥
-            // Se o início for maior que o término (ex: 18:30 > 17:00), ele inverte os dois no papel!
             if (displayInicio !== "--:--" && displayTermino !== "--:--" && displayInicio > displayTermino) {
                 let temp = displayInicio;
                 displayInicio = displayTermino;
                 displayTermino = temp;
             }
 
-            // 🔥 MÁGICA 2: Abreviação inteligente para não quebrar a linha 🔥
-            // Transforma "1 hora e 45 minutos" em "1h 45min"
             let displayDuracao = (live.duration || "--")
                 .replace('minutos', 'min')
                 .replace('minuto', 'min')
@@ -426,17 +437,15 @@ app.get('/api/report/pdf', async (req, res) => {
                 .replace('hora', 'h')
                 .replace(' e ', ' ');
 
-            // Limita o título para não invadir a coluna de horários
             const titulo = live.title ? live.title.substring(0, 42) : "Sem título";
 
-            // O { lineBreak: false } proíbe o PDF de jogar o texto para a linha de baixo
             doc.text(live.date, 50, y, { lineBreak: false });
             doc.text(titulo, 110, y, { lineBreak: false });
             doc.text(displayInicio, 350, y, { lineBreak: false });
             doc.text(displayTermino, 410, y, { lineBreak: false });
             doc.text(displayDuracao, 470, y, { lineBreak: false });
             
-            y += 25; // 🔥 MÁGICA 3: Aumentamos o pulo de linha de 20 para 25 (dá respiro e não fica colado)
+            y += 25; 
         });
 
         doc.end();
@@ -446,7 +455,7 @@ app.get('/api/report/pdf', async (req, res) => {
     }
 });
 
-setInterval(monitor, 900000);
+setInterval(monitor, 300000); // 5 em 5 minutos para ter mais precisão!
 
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
