@@ -15,12 +15,12 @@ app.use(cors());
 // ==========================================
 // CONFIGURAÇÕES E CONEXÃO COM O BANCO
 // ==========================================
-const API_KEY = 'AIzaSyDZ6OzN-CDu2J0lMWpG0qsADvNWvlfIQoc'; 
+const API_KEY = 'AIzaSyBGoaNHJY1_4wY2kKpIKlFn37gwv-PfMW4'; 
 const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ';
 const TELEGRAM_TOKEN = '8881818050:AAFZSOn231TQXWiuvyfJX_xq7LIjrbhStlA';
 
-// MÁGICA AQUI: O ID novo do seu Supergrupo!
-const TELEGRAM_CHAT_ID = '-1005294989968'; 
+// MUDANÇA AQUI: Usando 'let' para o bot aprender o ID sozinho!
+let TELEGRAM_CHAT_ID = '-5294989968'; 
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arthur:Arthur12%40XP@cluster0.nrt11po.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 
@@ -128,8 +128,16 @@ async function processarComandosTelegram() {
             telegramOffset = update.update_id + 1; 
 
             if (!update.message || !update.message.text) continue;
-            const chatId = update.message.chat.id;
+            const chatId = update.message.chat.id.toString();
             const text = update.message.text.trim();
+
+            // === AUTO-APRENDIZADO DE ID ===
+            // O bot olha o ID do grupo onde ele recebeu a mensagem e se ajusta sozinho!
+            if (TELEGRAM_CHAT_ID !== chatId) {
+                TELEGRAM_CHAT_ID = chatId;
+                console.log(`🚨 ID DO GRUPO ATUALIZADO AUTOMATICAMENTE PARA: ${TELEGRAM_CHAT_ID} 🚨`);
+            }
+            // ==============================
 
             if (text === '/status') {
                 let statusMsg = `📊 <b>CENTRAL DE COMANDO - ARTHUR TECH</b>\n\n`;
