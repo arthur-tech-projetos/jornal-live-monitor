@@ -17,18 +17,17 @@ app.use(cors());
 // ==========================================
 
 // 🔥 SISTEMA DE ROTAÇÃO DE APIS DO YOUTUBE 🔥
-// Coloque quantas chaves quiser separadas por vírgula.
 const YOUTUBE_API_KEYS = [
-    'AIzaSyDZ6OzN-CDu2J0lMWpG0qsADvNWvlfIQoc', // Chave Principal (A que você já usava)
-    'AIzaSyDOpCDRyn4knLVv5mfABC3Ih0ozRVCJNOw',               // Chave Reserva 1
-    'AIzaSyBGoaNHJY1_4wY2kKpIKlFn37gwv-PfMW4',              // Chave Reserva 2
+    'AIzaSyCEiU6t8FRWuZX3IfQhmIlAGG2zUz2-cB8',               // Chave 1
+    'AIzaSyB7eJVgy2RtV_5aHvVUTnIFGlu-LYlz7BM',               // Chave 2
+    'AIzaSyCms0FE8cwGSWNPipXwoPdh1MTFwPDU4Dw',               // Chave 3
 ];
-let currentApiKeyIndex = 0; // O sistema começa apontando para a primeira chave (índice 0)
+let currentApiKeyIndex = 0; 
 
 const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ';
 const TELEGRAM_TOKEN = '8881818050:AAFZSOn231TQXWiuvyfJX_xq7LIjrbhStlA';
 
-let TELEGRAM_CHAT_ID = '-1003937290720'; 
+let TELEGRAM_CHAT_ID = '-1005294989968'; 
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arthur:Arthur12%40XP@cluster0.nrt11po.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 
@@ -149,8 +148,15 @@ async function processarComandosTelegram() {
                 statusMsg += `🖥️ <b>API Status:</b> ONLINE 🟢\n`;
                 statusMsg += `🕒 <b>Horário Local:</b> ${moment().tz("America/Fortaleza").format("HH:mm:ss")}\n\n`;
 
+                const horaAtual = moment().tz("America/Fortaleza").hour();
+                const emHorarioComercial = horaAtual >= 6 && horaAtual <= 20;
+
                 if (currentLives.length === 0) {
-                    statusMsg += `⚪ <b>Transmissão Atual:</b> Nenhuma live ativa no momento. Em modo de espera com economia de dados ativa.`;
+                    if (emHorarioComercial) {
+                        statusMsg += `⚪ <b>Transmissão Atual:</b> Nenhuma live ativa no momento. Em modo de espera.\n\n📡 <b>Robô:</b> Procurando transmissões...`;
+                    } else {
+                        statusMsg += `🌙 <b>Transmissão Atual:</b> Nenhuma live ativa.\n\n💤 <b>Robô:</b> Em modo economia de madrugada (API pausada). Retorna às 06:00.`;
+                    }
                 } else {
                     statusMsg += `🚨 <b>TRANSMISSÃO AO VIVO DETECTADA:</b>\n`;
                     currentLives.forEach(l => {
@@ -205,9 +211,13 @@ async function processarComandosTelegram() {
 // ==========================================
 async function monitor() {
     try {
-        // 🔥 PUXA A CHAVE DA VEZ 🔥
         const API_KEY = YOUTUBE_API_KEYS[currentApiKeyIndex]; 
+        const horaAtual = moment().tz("America/Fortaleza").hour();
+        
+        // Janela de operação: 06:00 até 20:59 (Cobre grade matinal até fim da Voz do Brasil)
+        const isHorarioMonitoramento = horaAtual >= 6 && horaAtual <= 20; 
 
+        // 1. CHECAGEM DE LIVE EXISTENTE (Custo 1 ponto - Roda sempre se tiver live)
         if (currentLives.length > 0) {
             for (let i = currentLives.length - 1; i >= 0; i--) {
                 const videoId = currentLives[i].id;
@@ -264,51 +274,55 @@ async function monitor() {
             }
         }
 
+        // 2. BUSCA DE LIVES NOVAS (Custo 100 pontos - Só roda no horário de monitoramento!)
         if (currentLives.length === 0) {
-            const urlSearch = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${CHANNEL_ID}&eventType=live&type=video&key=${API_KEY}`;
-            const res = await axios.get(urlSearch);
-            const lives = res.data.items || [];
-            
-            for (const item of lives) {
-                const videoId = item.id.videoId;
-                const title = item.snippet.title;
-                const thumbnailUrl = item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.default?.url || '';
-                const nowTime = moment().tz("America/Fortaleza");
-
-                if (!lastKnownLiveIds.has(videoId)) {
-                    console.log(`Nova Live detectada: ${title}`);
-                    
-                    const mensagem = `🚨 <b>RÁDIO JORNAL AO VIVO</b>\n\n` +
-                                     `📺 <b>${title}</b>\n\n` +
-                                     `🔗 <a href="https://youtube.com/watch?v=${videoId}">Clique aqui para assistir</a>`;
-                    
-                    await enviarTelegramComFoto(thumbnailUrl, mensagem);
-                    await registrarEventoGlobal(videoId, 'alert', 'Nova Live Iniciada', title, false);
-                    lastKnownLiveIds.add(videoId);
-                }
+            if (isHorarioMonitoramento) {
+                const urlSearch = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${CHANNEL_ID}&eventType=live&type=video&key=${API_KEY}`;
+                const res = await axios.get(urlSearch);
+                const lives = res.data.items || [];
                 
-                currentLives.push({
-                    id: videoId,
-                    title: title,
-                    isLive: true,
-                    startTime: nowTime.format("HH:mm"),
-                    startTimeRaw: nowTime.toISOString(),
-                    overtimeNotified: false
-                });
-            }
+                for (const item of lives) {
+                    const videoId = item.id.videoId;
+                    const title = item.snippet.title;
+                    const thumbnailUrl = item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.default?.url || '';
+                    const nowTime = moment().tz("America/Fortaleza");
 
-            const currentIds = new Set(lives.map(l => l.id.videoId));
-            lastKnownLiveIds = new Set([...lastKnownLiveIds].filter(id => currentIds.has(id)));
+                    if (!lastKnownLiveIds.has(videoId)) {
+                        console.log(`Nova Live detectada: ${title}`);
+                        
+                        const mensagem = `🚨 <b>RÁDIO JORNAL AO VIVO</b>\n\n` +
+                                         `📺 <b>${title}</b>\n\n` +
+                                         `🔗 <a href="https://youtube.com/watch?v=${videoId}">Clique aqui para assistir</a>`;
+                        
+                        await enviarTelegramComFoto(thumbnailUrl, mensagem);
+                        await registrarEventoGlobal(videoId, 'alert', 'Nova Live Iniciada', title, false);
+                        lastKnownLiveIds.add(videoId);
+                    }
+                    
+                    currentLives.push({
+                        id: videoId,
+                        title: title,
+                        isLive: true,
+                        startTime: nowTime.format("HH:mm"),
+                        startTimeRaw: nowTime.toISOString(),
+                        overtimeNotified: false
+                    });
+                }
+
+                const currentIds = new Set(lives.map(l => l.id.videoId));
+                lastKnownLiveIds = new Set([...lastKnownLiveIds].filter(id => currentIds.has(id)));
+            } else {
+                // Fora do horário comercial: O bot dorme e não gasta a API!
+                erro429Notificado = false; 
+            }
         }
 
-        erro429Notificado = false; // Se funcionou, reseta o aviso
+        erro429Notificado = false; 
 
     } catch (err) { 
-        // 🔥 A MÁGICA DA ROTAÇÃO ACONTECE AQUI 🔥
         if (err.response && (err.response.status === 429 || err.response.status === 403)) {
-            // Verifica se tem uma próxima API na lista
             if (currentApiKeyIndex < YOUTUBE_API_KEYS.length - 1) {
-                currentApiKeyIndex++; // Pula pra próxima
+                currentApiKeyIndex++; 
                 await registrarEventoGlobal(
                     'rota-api-' + Date.now(), 
                     'warning', 
@@ -317,9 +331,8 @@ async function monitor() {
                     true
                 );
             } else {
-                // Se esgotou todas as chaves
                 if (!erro429Notificado) {
-                    await registrarEventoGlobal('erro-429', 'alert', 'Alerta Crítico: Limite Geral de APIs', 'O sistema consumiu todas as chaves de API disponíveis no servidor. O monitoramento de novas lives entrará em espera até a renovação da cota.', true);
+                    await registrarEventoGlobal('erro-429', 'alert', 'Alerta Crítico: Limite Geral de APIs', 'O sistema consumiu todas as chaves de API. O monitoramento entrará em espera até a renovação da cota de madrugada.', true);
                     erro429Notificado = true; 
                 }
             }
@@ -382,19 +395,16 @@ app.get('/api/report/pdf', async (req, res) => {
         const doc = new PDFDocument({ size: 'A4', margin: 50 });
         doc.pipe(res);
 
-        // --- FONTES (Normal e Negrito) ---
         const fontPath = path.join(__dirname, 'arial.ttf');
         if (fs.existsSync(fontPath)) doc.registerFont('Arial', fontPath);
         else doc.registerFont('Arial', 'Helvetica');
 
-        // 🔥 NOVIDADE: Registrando o arquivo Arial Bold que vi na sua pasta 🔥
         const fontBoldPath = path.join(__dirname, 'arial-bold.ttf');
         if (fs.existsSync(fontBoldPath)) doc.registerFont('Arial-Bold', fontBoldPath);
         else doc.registerFont('Arial-Bold', 'Helvetica-Bold');
 
         if (fs.existsSync('logo.png')) doc.image('logo.png', 50, 45, { fit: [120, 60] });
         
-        // Chamando a fonte Arial-Bold para o "RELATÓRIO"
         doc.font('Arial-Bold').fontSize(20).fillColor('#555555').text('RELATÓRIO', 400, 55, { align: 'right' });
         doc.moveTo(50, 110).lineTo(545, 110).lineWidth(3).strokeColor('#e60000').stroke();
 
@@ -455,7 +465,7 @@ app.get('/api/report/pdf', async (req, res) => {
     }
 });
 
-setInterval(monitor, 300000); // 5 em 5 minutos para ter mais precisão!
+setInterval(monitor, 300000); 
 
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
