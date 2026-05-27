@@ -159,7 +159,6 @@ async function processarComandosTelegram() {
                 }
 
                 const horaAtual = moment().tz("America/Fortaleza").hour();
-                // O horário comercial para o robô agora é das 06:00 até as 18:59
                 const emHorarioComercial = horaAtual >= 6 && horaAtual < 19;
 
                 if (currentLives.length === 0) {
@@ -225,7 +224,7 @@ async function monitor() {
         const API_KEY = YOUTUBE_API_KEYS[currentApiKeyIndex]; 
         const horaAtual = moment().tz("America/Fortaleza").hour();
         
-        // Janela de operação restrita: 06:00 até 18:59 (Poupa a API antes da Voz do Brasil)
+        // Janela de operação restrita: 06:00 até 18:59
         const isHorarioMonitoramento = horaAtual >= 6 && horaAtual < 19; 
 
         // 1. CHECAGEM DE LIVE EXISTENTE (Custo 1 ponto - Roda sempre se tiver live)
@@ -352,7 +351,7 @@ async function monitor() {
 }
 
 // ==========================================
-// ROTAS DA API (Endpoints e PDF)
+// ROTAS DA API (Endpoints, CSV e PDF com Filtro)
 // ==========================================
 app.get('/api/status', async (req, res) => {
     try {
@@ -371,14 +370,21 @@ app.get('/api/status', async (req, res) => {
     }
 });
 
+// CSV com suporte ao filtro de data
 app.get('/api/report/download', async (req, res) => {
     try {
-        const todasAsLives = await LivePassada.find().sort({ createdAt: -1 });
+        let filter = {};
+        if (req.query.date) {
+            // Se o painel enviar a data, filtramos no banco!
+            filter.date = req.query.date;
+        }
+
+        const todasAsLives = await LivePassada.find(filter).sort({ createdAt: -1 });
         let csvContent = "\uFEFF"; 
         csvContent += "Data;Titulo do Programa;Horario de Inicio;Horario de Termino;Duracao Total\n";
 
         if (todasAsLives.length === 0) {
-            csvContent += "---;Nenhuma transmissão salva no histórico do banco ainda;---;---;---\n";
+            csvContent += "---;Nenhuma transmissão encontrada para esta data;---;---;---\n";
         } else {
             todasAsLives.forEach(live => {
                 const cleanTitle = live.title.replace(/;/g, ' ').replace(/\n/g, ' ');
@@ -387,16 +393,22 @@ app.get('/api/report/download', async (req, res) => {
         }
 
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-        res.setHeader('Content-Disposition', 'attachment; filename=relatorio_monitoramento_radio.csv');
+        res.setHeader('Content-Disposition', `attachment; filename=relatorio_radio_jornal_${req.query.date ? req.query.date.replace(/\//g, '-') : 'completo'}.csv`);
         res.status(200).send(csvContent);
     } catch (err) {
         res.status(500).send("Erro ao gerar relatório.");
     }
 });
 
+// PDF com suporte ao filtro de data
 app.get('/api/report/pdf', async (req, res) => {
     try {
-        const todasAsLives = await LivePassada.find().sort({ createdAt: -1 });
+        let filter = {};
+        if (req.query.date) {
+            filter.date = req.query.date;
+        }
+
+        const todasAsLives = await LivePassada.find(filter).sort({ createdAt: -1 });
 
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', 'inline; filename=relatorio_radio_jornal.pdf');
@@ -420,52 +432,66 @@ app.get('/api/report/pdf', async (req, res) => {
         doc.font('Arial').fontSize(10).fillColor('#000000');
         doc.text(`Documento: Relatório Oficial de Monitoramento de Grade (YouTube)`, 50, 130);
         doc.text(`Gerado em: ${moment().tz("America/Fortaleza").format("DD/MM/YYYY [às] HH:mm")}`, 50, 145);
-        doc.text(`Emissora: Rádio Jornal Meio Norte - Teresina, Piauí`, 50, 160);
+        
+        // Se escolheu uma data, mostra no PDF
+        if (req.query.date) {
+            doc.font('Arial-Bold').text(`Referente a: ${req.query.date}`, 50, 160);
+            doc.font('Arial').text(`Emissora: Rádio Jornal Meio Norte - Teresina, Piauí`, 50, 175);
+        } else {
+            doc.text(`Emissora: Rádio Jornal Meio Norte - Teresina, Piauí`, 50, 160);
+        }
+
+        const yHeader = req.query.date ? 215 : 200;
+        const yLine = req.query.date ? 230 : 215;
 
         doc.font('Arial-Bold').fontSize(9).fillColor('#000000');
-        doc.text('DATA', 50, 200);
-        doc.text('TÍTULO DA TRANSMISSÃO', 110, 200); 
-        doc.text('INÍCIO', 350, 200);
-        doc.text('TÉRMINO', 410, 200);
-        doc.text('DURAÇÃO', 470, 200);
+        doc.text('DATA', 50, yHeader);
+        doc.text('TÍTULO DA TRANSMISSÃO', 110, yHeader); 
+        doc.text('INÍCIO', 350, yHeader);
+        doc.text('TÉRMINO', 410, yHeader);
+        doc.text('DURAÇÃO', 470, yHeader);
         
-        doc.moveTo(50, 215).lineTo(545, 215).lineWidth(1).strokeColor('#cccccc').stroke();
+        doc.moveTo(50, yLine).lineTo(545, yLine).lineWidth(1).strokeColor('#cccccc').stroke();
 
-        let y = 235; 
+        let y = yLine + 20; 
         doc.font('Arial').fontSize(9).fillColor('#333333');
         
-        todasAsLives.forEach((live) => {
-            if (y > 750) { 
-                doc.addPage(); 
-                y = 50; 
-            }
-            
-            let displayInicio = live.startTime || "--:--";
-            let displayTermino = live.endTime || "--:--";
+        if (todasAsLives.length === 0) {
+            doc.text("Nenhuma transmissão encontrada para os critérios selecionados.", 50, y);
+        } else {
+            todasAsLives.forEach((live) => {
+                if (y > 750) { 
+                    doc.addPage(); 
+                    y = 50; 
+                }
+                
+                let displayInicio = live.startTime || "--:--";
+                let displayTermino = live.endTime || "--:--";
 
-            if (displayInicio !== "--:--" && displayTermino !== "--:--" && displayInicio > displayTermino) {
-                let temp = displayInicio;
-                displayInicio = displayTermino;
-                displayTermino = temp;
-            }
+                if (displayInicio !== "--:--" && displayTermino !== "--:--" && displayInicio > displayTermino) {
+                    let temp = displayInicio;
+                    displayInicio = displayTermino;
+                    displayTermino = temp;
+                }
 
-            let displayDuracao = (live.duration || "--")
-                .replace('minutos', 'min')
-                .replace('minuto', 'min')
-                .replace('horas', 'h')
-                .replace('hora', 'h')
-                .replace(' e ', ' ');
+                let displayDuracao = (live.duration || "--")
+                    .replace('minutos', 'min')
+                    .replace('minuto', 'min')
+                    .replace('horas', 'h')
+                    .replace('hora', 'h')
+                    .replace(' e ', ' ');
 
-            const titulo = live.title ? live.title.substring(0, 42) : "Sem título";
+                const titulo = live.title ? live.title.substring(0, 42) : "Sem título";
 
-            doc.text(live.date, 50, y, { lineBreak: false });
-            doc.text(titulo, 110, y, { lineBreak: false });
-            doc.text(displayInicio, 350, y, { lineBreak: false });
-            doc.text(displayTermino, 410, y, { lineBreak: false });
-            doc.text(displayDuracao, 470, y, { lineBreak: false });
-            
-            y += 25; 
-        });
+                doc.text(live.date, 50, y, { lineBreak: false });
+                doc.text(titulo, 110, y, { lineBreak: false });
+                doc.text(displayInicio, 350, y, { lineBreak: false });
+                doc.text(displayTermino, 410, y, { lineBreak: false });
+                doc.text(displayDuracao, 470, y, { lineBreak: false });
+                
+                y += 25; 
+            });
+        }
 
         doc.end();
     } catch (err) {
