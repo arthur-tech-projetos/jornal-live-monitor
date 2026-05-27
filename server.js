@@ -148,14 +148,25 @@ async function processarComandosTelegram() {
                 statusMsg += `🖥️ <b>API Status:</b> ONLINE 🟢\n`;
                 statusMsg += `🕒 <b>Horário Local:</b> ${moment().tz("America/Fortaleza").format("HH:mm:ss")}\n\n`;
 
+                // 🔥 PAINEL DO MOTOR DE APIS 🔥
+                statusMsg += `🔑 <b>Cota do YouTube (APIs):</b>\n`;
+                if (erro429Notificado && currentApiKeyIndex >= YOUTUBE_API_KEYS.length - 1) {
+                    statusMsg += `🔴 <b>ESGOTADO:</b> Todas as ${YOUTUBE_API_KEYS.length} chaves foram consumidas!\n\n`;
+                } else {
+                    const chavesRestantes = YOUTUBE_API_KEYS.length - (currentApiKeyIndex + 1);
+                    statusMsg += `🟢 <b>Ativa:</b> Operando na Chave ${currentApiKeyIndex + 1}\n`;
+                    statusMsg += `🔋 <b>Reservas:</b> ${chavesRestantes} chave(s) pronta(s)\n\n`;
+                }
+
                 const horaAtual = moment().tz("America/Fortaleza").hour();
-                const emHorarioComercial = horaAtual >= 6 && horaAtual <= 20;
+                // O horário comercial para o robô agora é das 06:00 até as 18:59
+                const emHorarioComercial = horaAtual >= 6 && horaAtual < 19;
 
                 if (currentLives.length === 0) {
                     if (emHorarioComercial) {
                         statusMsg += `⚪ <b>Transmissão Atual:</b> Nenhuma live ativa no momento. Em modo de espera.\n\n📡 <b>Robô:</b> Procurando transmissões...`;
                     } else {
-                        statusMsg += `🌙 <b>Transmissão Atual:</b> Nenhuma live ativa.\n\n💤 <b>Robô:</b> Em modo economia de madrugada (API pausada). Retorna às 06:00.`;
+                        statusMsg += `🌙 <b>Transmissão Atual:</b> Nenhuma live ativa.\n\n💤 <b>Robô:</b> Em modo economia (API pausada). Retorna às 06:00.`;
                     }
                 } else {
                     statusMsg += `🚨 <b>TRANSMISSÃO AO VIVO DETECTADA:</b>\n`;
@@ -214,8 +225,8 @@ async function monitor() {
         const API_KEY = YOUTUBE_API_KEYS[currentApiKeyIndex]; 
         const horaAtual = moment().tz("America/Fortaleza").hour();
         
-        // Janela de operação: 06:00 até 20:59 (Cobre grade matinal até fim da Voz do Brasil)
-        const isHorarioMonitoramento = horaAtual >= 6 && horaAtual <= 20; 
+        // Janela de operação restrita: 06:00 até 18:59 (Poupa a API antes da Voz do Brasil)
+        const isHorarioMonitoramento = horaAtual >= 6 && horaAtual < 19; 
 
         // 1. CHECAGEM DE LIVE EXISTENTE (Custo 1 ponto - Roda sempre se tiver live)
         if (currentLives.length > 0) {
@@ -231,7 +242,6 @@ async function monitor() {
                 
                 const tituloUpper = currentLives[i].title.toUpperCase();
                 if (tituloUpper.includes("JORNAL DA TARDE")) limite = 95; 
-                if (tituloUpper.includes("VOZ DO BRASIL")) limite = 25; 
 
                 if (tempoNoAr > limite && !currentLives[i].overtimeNotified) {
                     currentLives[i].overtimeNotified = true; 
@@ -274,7 +284,7 @@ async function monitor() {
             }
         }
 
-        // 2. BUSCA DE LIVES NOVAS (Custo 100 pontos - Só roda no horário de monitoramento!)
+        // 2. BUSCA DE LIVES NOVAS (Custo 100 pontos)
         if (currentLives.length === 0) {
             if (isHorarioMonitoramento) {
                 const urlSearch = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${CHANNEL_ID}&eventType=live&type=video&key=${API_KEY}`;
@@ -312,7 +322,6 @@ async function monitor() {
                 const currentIds = new Set(lives.map(l => l.id.videoId));
                 lastKnownLiveIds = new Set([...lastKnownLiveIds].filter(id => currentIds.has(id)));
             } else {
-                // Fora do horário comercial: O bot dorme e não gasta a API!
                 erro429Notificado = false; 
             }
         }
