@@ -355,7 +355,7 @@ app.get('/api/report/download', async (req, res) => {
 });
 
 // ==========================================
-// ROTA PDF (LAYOUT PERFEITO E BLINDADO)
+// ROTA PDF (ESTILIZADA E COM AUTO-CORREÇÃO)
 // ==========================================
 app.get('/api/report/pdf', async (req, res) => {
     try {
@@ -372,59 +372,71 @@ app.get('/api/report/pdf', async (req, res) => {
         if (fs.existsSync(fontPath)) doc.registerFont('Arial', fontPath);
         else doc.registerFont('Arial', 'Helvetica');
 
-        // --- 1. LOGO E CABEÇALHO (Y fixo em 45 e 55) ---
+        // --- 1. LOGO E CABEÇALHO ---
         if (fs.existsSync('logo.png')) {
             doc.image('logo.png', 50, 45, { fit: [120, 60] });
         }
         
         doc.font('Arial').fontSize(20).fillColor('#555555').text('RELATÓRIO', 400, 55, { align: 'right' });
-        
-        // Linha vermelha no Y: 110
         doc.moveTo(50, 110).lineTo(545, 110).lineWidth(3).strokeColor('#e60000').stroke();
 
-        // --- 2. INFORMAÇÕES DO DOCUMENTO (Y fixos: 130, 145, 160) ---
+        // --- 2. INFORMAÇÕES DO DOCUMENTO ---
         doc.font('Arial').fontSize(10).fillColor('#000000');
         doc.text(`Documento: Relatório Oficial de Monitoramento de Grade (YouTube)`, 50, 130);
         doc.text(`Gerado em: ${moment().tz("America/Fortaleza").format("DD/MM/YYYY [às] HH:mm")}`, 50, 145);
         doc.text(`Emissora: Rádio Jornal Meio Norte - Teresina, Piauí`, 50, 160);
 
-        // --- 3. CABEÇALHO DA TABELA (Y fixo em 200) ---
+        // --- 3. CABEÇALHO DA TABELA (Espaçamento Ajustado) ---
         doc.font('Arial').fontSize(9).fillColor('#000000');
-        // Usando posições X exatas para criar colunas alinhadas
         doc.text('DATA', 50, 200);
-        doc.text('TÍTULO DA TRANSMISSÃO', 120, 200);
-        doc.text('INÍCIO', 360, 200);
-        doc.text('TÉRMINO', 420, 200);
-        doc.text('DURAÇÃO', 480, 200);
+        doc.text('TÍTULO DA TRANSMISSÃO', 110, 200); // Mais espaço para a data
+        doc.text('INÍCIO', 350, 200);
+        doc.text('TÉRMINO', 410, 200);
+        doc.text('DURAÇÃO', 470, 200);
         
-        // Linha cinza da tabela no Y: 215
         doc.moveTo(50, 215).lineTo(545, 215).lineWidth(1).strokeColor('#cccccc').stroke();
 
         // --- 4. LINHAS DOS DADOS ---
-        let y = 230; // Começamos a imprimir dados na altura 230
+        let y = 235; // Começa um pouco mais abaixo da linha
         doc.font('Arial').fontSize(9).fillColor('#333333');
         
         todasAsLives.forEach((live) => {
-            // Se chegar no fim da página, cria uma nova
             if (y > 750) { 
                 doc.addPage(); 
                 y = 50; 
             }
             
-            // Garantir que não existam campos vazios e limitar tamanho do título
-            const inicio = live.startTime || "--:--";
-            const termino = live.endTime || "--:--";
-            const duracao = live.duration || "--";
+            let displayInicio = live.startTime || "--:--";
+            let displayTermino = live.endTime || "--:--";
+
+            // 🔥 MÁGICA: Auto-correção de horários invertidos 🔥
+            // Se o início for maior que o término (ex: 18:30 > 17:00), ele inverte os dois no papel!
+            if (displayInicio !== "--:--" && displayTermino !== "--:--" && displayInicio > displayTermino) {
+                let temp = displayInicio;
+                displayInicio = displayTermino;
+                displayTermino = temp;
+            }
+
+            // 🔥 MÁGICA 2: Abreviação inteligente para não quebrar a linha 🔥
+            // Transforma "1 hora e 45 minutos" em "1h 45min"
+            let displayDuracao = (live.duration || "--")
+                .replace('minutos', 'min')
+                .replace('minuto', 'min')
+                .replace('horas', 'h')
+                .replace('hora', 'h')
+                .replace(' e ', ' ');
+
+            // Limita o título para não invadir a coluna de horários
             const titulo = live.title ? live.title.substring(0, 42) : "Sem título";
 
-            // Imprimindo com os mesmos 'X' do cabeçalho da tabela
-            doc.text(live.date, 50, y);
-            doc.text(titulo, 120, y);
-            doc.text(inicio, 360, y);
-            doc.text(termino, 420, y);
-            doc.text(duracao, 480, y);
+            // O { lineBreak: false } proíbe o PDF de jogar o texto para a linha de baixo
+            doc.text(live.date, 50, y, { lineBreak: false });
+            doc.text(titulo, 110, y, { lineBreak: false });
+            doc.text(displayInicio, 350, y, { lineBreak: false });
+            doc.text(displayTermino, 410, y, { lineBreak: false });
+            doc.text(displayDuracao, 470, y, { lineBreak: false });
             
-            y += 20; // Pula 20 pixels para a linha de baixo
+            y += 25; // 🔥 MÁGICA 3: Aumentamos o pulo de linha de 20 para 25 (dá respiro e não fica colado)
         });
 
         doc.end();
@@ -433,6 +445,7 @@ app.get('/api/report/pdf', async (req, res) => {
         res.status(500).send("Erro ao gerar PDF.");
     }
 });
+
 setInterval(monitor, 900000);
 
 app.listen(PORT, () => {
