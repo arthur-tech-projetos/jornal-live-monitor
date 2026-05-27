@@ -15,7 +15,7 @@ app.use(cors());
 // ==========================================
 moment.tz.setDefault("America/Fortaleza");
 
-const API_KEY = 'AIzaSyDZ6OzN-CDu2J0lMWpG0qsADvNWvlfIQoc'; 
+const API_KEY = 'AIzaSyDOpCDRyn4knLVv5mfABC3Ih0ozRVCJNOw'; 
 const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ';
 const TELEGRAM_TOKEN = '8881818050:AAFZSOn231TQXWiuvyfJX_xq7LIjrbhStlA'; 
 const TELEGRAM_CHAT_ID = '-1003937290720'; 
