@@ -15,12 +15,12 @@ app.use(cors());
 // ==========================================
 // CONFIGURAÇÕES E CONEXÃO COM O BANCO
 // ==========================================
-const API_KEY = 'AIzaSyBGoaNHJY1_4wY2kKpIKlFn37gwv-PfMW4'; 
+const API_KEY = 'AIzaSyDZ6OzN-CDu2J0lMWpG0qsADvNWvlfIQoc'; 
 const CHANNEL_ID = 'UCEXZddw6rp2Nu76ibj9e8SQ';
 const TELEGRAM_TOKEN = '8881818050:AAFZSOn231TQXWiuvyfJX_xq7LIjrbhStlA';
 
 // MÁGICA AQUI: O ID novo do seu Supergrupo!
-const TELEGRAM_CHAT_ID = '-3937290720';
+const TELEGRAM_CHAT_ID = '-1005294989968'; 
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arthur:Arthur12%40XP@cluster0.nrt11po.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 
@@ -200,16 +200,16 @@ async function monitor() {
                 const res = await axios.get(urlVideos);
                 const item = res.data.items[0];
 
-                // === NOVA LÓGICA DE OVERTIME (TEMPO EXCEDIDO) ===
+                // === ALERTA DE TEMPO EXCEDIDO (OVERTIME) ===
                 const tempoNoAr = moment().tz("America/Fortaleza").diff(moment(currentLives[i].startTimeRaw), 'minutes');
-                let limite = 120; // 2 horas por padrão
+                let limite = 120; // 2 horas padrão
                 
                 const tituloUpper = currentLives[i].title.toUpperCase();
-                if (tituloUpper.includes("JORNAL DA TARDE")) limite = 95; // 90 min + 5 de folga
-                if (tituloUpper.includes("VOZ DO BRASIL")) limite = 25; // 25 min exatos
+                if (tituloUpper.includes("JORNAL DA TARDE")) limite = 95; 
+                if (tituloUpper.includes("VOZ DO BRASIL")) limite = 25; 
 
                 if (tempoNoAr > limite && !currentLives[i].overtimeNotified) {
-                    currentLives[i].overtimeNotified = true; // Marca para não enviar repetido
+                    currentLives[i].overtimeNotified = true; 
                     await registrarEventoGlobal(
                         videoId + '-overtime', 
                         'warning', 
@@ -218,7 +218,7 @@ async function monitor() {
                         true
                     );
                 }
-                // ================================================
+                // ===========================================
 
                 if (!item || item.snippet.liveBroadcastContent !== 'live') {
                     const liveTitle = currentLives[i].title;
@@ -279,7 +279,7 @@ async function monitor() {
                     isLive: true,
                     startTime: nowTime.format("HH:mm"),
                     startTimeRaw: nowTime.toISOString(),
-                    overtimeNotified: false // Garante que começa sem alerta acionado
+                    overtimeNotified: false
                 });
             }
 
