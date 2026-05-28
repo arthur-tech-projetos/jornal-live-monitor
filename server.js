@@ -227,7 +227,7 @@ async function monitor() {
         // Janela de operação restrita: 06:00 até 18:59
         const isHorarioMonitoramento = horaAtual >= 6 && horaAtual < 19; 
 
-        // 1. CHECAGEM DE LIVE EXISTENTE (Custo 1 ponto - Roda sempre se tiver live)
+        // 1. CHECAGEM DE LIVE EXISTENTE
         if (currentLives.length > 0) {
             for (let i = currentLives.length - 1; i >= 0; i--) {
                 const videoId = currentLives[i].id;
@@ -255,21 +255,33 @@ async function monitor() {
 
                 if (!item || item.snippet.liveBroadcastContent !== 'live') {
                     const liveTitle = currentLives[i].title;
+                    const originalStartTime = currentLives[i].startTime; // 🔥 PUXA O HORÁRIO EXATO E TRAVADO DA TELA 🔥
                     const startTimeRaw = moment(currentLives[i].startTimeRaw);
                     const endTime = moment().tz("America/Fortaleza");
                     
                     const durationMinutes = endTime.diff(startTimeRaw, 'minutes');
-                    const formattedDuration = durationMinutes > 0 ? `${durationMinutes} minutos` : "Menos de 1 minuto";
+                    
+                    // 🔥 CONVERSOR DE HORAS (104 min = 1h 44min) 🔥
+                    let formattedDuration = "Menos de 1 min";
+                    if (durationMinutes > 0) {
+                        const horas = Math.floor(durationMinutes / 60);
+                        const minutos = durationMinutes % 60;
+                        if (horas > 0) {
+                            formattedDuration = `${horas}h ${minutos}min`;
+                        } else {
+                            formattedDuration = `${minutos}min`;
+                        }
+                    }
 
                     currentLives.splice(i, 1);
                     
                     await LivePassada.create({
                         id: videoId,
                         title: liveTitle,
-                        date: startTimeRaw.format("DD/MM/YYYY"),
-                        startTime: startTimeRaw.format("HH:mm"),
-                        endTime: endTime.format("HH:mm"),
-                        duration: formattedDuration
+                        date: endTime.format("DD/MM/YYYY"), // Puxa data de encerramento do fuso local
+                        startTime: originalStartTime,       // Horário de Início Impecável
+                        endTime: endTime.format("HH:mm"),   // Horário de Fim Impecável
+                        duration: formattedDuration         // Formato bonito em horas e minutos
                     });
 
                     await registrarEventoGlobal(
@@ -374,10 +386,7 @@ app.get('/api/status', async (req, res) => {
 app.get('/api/report/download', async (req, res) => {
     try {
         let filter = {};
-        if (req.query.date) {
-            // Se o painel enviar a data, filtramos no banco!
-            filter.date = req.query.date;
-        }
+        if (req.query.date) filter.date = req.query.date;
 
         const todasAsLives = await LivePassada.find(filter).sort({ createdAt: -1 });
         let csvContent = "\uFEFF"; 
@@ -400,13 +409,11 @@ app.get('/api/report/download', async (req, res) => {
     }
 });
 
-// PDF com suporte ao filtro de data
+// PDF limpo (Retirada a inversão falsa de horários que escondia o bug)
 app.get('/api/report/pdf', async (req, res) => {
     try {
         let filter = {};
-        if (req.query.date) {
-            filter.date = req.query.date;
-        }
+        if (req.query.date) filter.date = req.query.date;
 
         const todasAsLives = await LivePassada.find(filter).sort({ createdAt: -1 });
 
@@ -433,7 +440,6 @@ app.get('/api/report/pdf', async (req, res) => {
         doc.text(`Documento: Relatório Oficial de Monitoramento de Grade (YouTube)`, 50, 130);
         doc.text(`Gerado em: ${moment().tz("America/Fortaleza").format("DD/MM/YYYY [às] HH:mm")}`, 50, 145);
         
-        // Se escolheu uma data, mostra no PDF
         if (req.query.date) {
             doc.font('Arial-Bold').text(`Referente a: ${req.query.date}`, 50, 160);
             doc.font('Arial').text(`Emissora: Rádio Jornal Meio Norte - Teresina, Piauí`, 50, 175);
@@ -464,30 +470,15 @@ app.get('/api/report/pdf', async (req, res) => {
                     doc.addPage(); 
                     y = 50; 
                 }
-                
-                let displayInicio = live.startTime || "--:--";
-                let displayTermino = live.endTime || "--:--";
-
-                if (displayInicio !== "--:--" && displayTermino !== "--:--" && displayInicio > displayTermino) {
-                    let temp = displayInicio;
-                    displayInicio = displayTermino;
-                    displayTermino = temp;
-                }
-
-                let displayDuracao = (live.duration || "--")
-                    .replace('minutos', 'min')
-                    .replace('minuto', 'min')
-                    .replace('horas', 'h')
-                    .replace('hora', 'h')
-                    .replace(' e ', ' ');
 
                 const titulo = live.title ? live.title.substring(0, 42) : "Sem título";
-
+                
+                // Sem a necessidade de gambiarras e strings falsas!
                 doc.text(live.date, 50, y, { lineBreak: false });
                 doc.text(titulo, 110, y, { lineBreak: false });
-                doc.text(displayInicio, 350, y, { lineBreak: false });
-                doc.text(displayTermino, 410, y, { lineBreak: false });
-                doc.text(displayDuracao, 470, y, { lineBreak: false });
+                doc.text(live.startTime || "--:--", 350, y, { lineBreak: false });
+                doc.text(live.endTime || "--:--", 410, y, { lineBreak: false });
+                doc.text(live.duration || "--", 470, y, { lineBreak: false });
                 
                 y += 25; 
             });
