@@ -248,14 +248,14 @@ async function monitor() {
                         videoId + '-overtime', 
                         'warning', 
                         'Atenção: Live Passou do Horário', 
-                        `A transmissão "<b>${currentLives[i].title}</b>" já está no ar há ${tempoNoAr} minutos. Verifique se o operador esqueceu de cortar o sinal do estúdio para o YouTube!`, 
+                        `A transmissão "${currentLives[i].title}" já está no ar há ${tempoNoAr} minutos. Verifique se o operador esqueceu de cortar o sinal do estúdio para o YouTube!`, 
                         true
                     );
                 }
 
                 if (!item || item.snippet.liveBroadcastContent !== 'live') {
                     const liveTitle = currentLives[i].title;
-                    const originalStartTime = currentLives[i].startTime; // 🔥 PUXA O HORÁRIO EXATO E TRAVADO DA TELA 🔥
+                    const originalStartTime = currentLives[i].startTime;
                     const startTimeRaw = moment(currentLives[i].startTimeRaw);
                     const endTime = moment().tz("America/Fortaleza");
                     
@@ -278,17 +278,17 @@ async function monitor() {
                     await LivePassada.create({
                         id: videoId,
                         title: liveTitle,
-                        date: endTime.format("DD/MM/YYYY"), // Puxa data de encerramento do fuso local
-                        startTime: originalStartTime,       // Horário de Início Impecável
-                        endTime: endTime.format("HH:mm"),   // Horário de Fim Impecável
-                        duration: formattedDuration         // Formato bonito em horas e minutos
+                        date: endTime.format("DD/MM/YYYY"),
+                        startTime: originalStartTime,
+                        endTime: endTime.format("HH:mm"),
+                        duration: formattedDuration
                     });
 
                     await registrarEventoGlobal(
                         videoId + '-end', 
                         'idle', 
                         'Transmissão Encerrada', 
-                        `A rádio finalizou a live no YouTube:\n📺 <b>${liveTitle}</b>\n⏱️ <b>Duração total:</b> ${formattedDuration}`, 
+                        `A rádio finalizou a live no YouTube:\n📺 ${liveTitle}\n⏱️ Duração total: ${formattedDuration}`, 
                         true
                     );
                 }
@@ -409,7 +409,7 @@ app.get('/api/report/download', async (req, res) => {
     }
 });
 
-// PDF limpo (Retirada a inversão falsa de horários que escondia o bug)
+// PDF limpo
 app.get('/api/report/pdf', async (req, res) => {
     try {
         let filter = {};
@@ -473,7 +473,6 @@ app.get('/api/report/pdf', async (req, res) => {
 
                 const titulo = live.title ? live.title.substring(0, 42) : "Sem título";
                 
-                // Sem a necessidade de gambiarras e strings falsas!
                 doc.text(live.date, 50, y, { lineBreak: false });
                 doc.text(titulo, 110, y, { lineBreak: false });
                 doc.text(live.startTime || "--:--", 350, y, { lineBreak: false });
